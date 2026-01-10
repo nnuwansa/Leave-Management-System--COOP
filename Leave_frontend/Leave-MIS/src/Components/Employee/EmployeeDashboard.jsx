@@ -15,42 +15,7 @@ import {
 } from "lucide-react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "../CSS/EmployeeDashboard.css";
-const BASE_URL = "https://leave-management-system--dcd.fly.dev";
-
-// Generic API call function
-const apiCall = async (endpoint, options = {}) => {
-  const token = localStorage.getItem("token");
-  const config = {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-    ...options,
-  };
-
-  const response = await fetch(`${BASE_URL}${endpoint}`, config);
-  const data = await response.text();
-
-  if (!response.ok)
-    throw new Error(data || `HTTP error! status: ${response.status}`);
-
-  try {
-    return JSON.parse(data);
-  } catch {
-    return data;
-  }
-};
-
-//Exported API object
-const API = {
-  get: (endpoint) => apiCall(endpoint),
-  post: (endpoint, data) =>
-    apiCall(endpoint, { method: "POST", body: JSON.stringify(data) }),
-  put: (endpoint, data) =>
-    apiCall(endpoint, { method: "PUT", body: JSON.stringify(data) }),
-  delete: (endpoint) => apiCall(endpoint, { method: "DELETE" }),
-};
+import API from "../../utils/apiUtils";
 
 // ---------------- Main Component ----------------
 const EmployeeDashboard = () => {
