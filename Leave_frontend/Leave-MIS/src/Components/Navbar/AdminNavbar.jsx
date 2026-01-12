@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import API from "axios";
+import API from "../../API/axios";
 import { FaBell, FaBars, FaTimes } from "react-icons/fa";
 import "../CSS/Navbar.css";
 
@@ -26,45 +26,35 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // useEffect(() => {
-  //   if (!token) return;
-
-  //   // fetch notifications
-  //   axios
-  //     .get("http://localhost:8080/admin/notifications", {
-  //       headers: { Authorization: `Bearer ${token}` },
-  //     })
-  //     .then((res) => setNotifications(res.data))
-  //     .catch((err) => console.error("Notifications error:", err));
-
-  //   // fetch logged-in admin details
-  //   axios
-  //     .get("http://localhost:8080/employee/me", {
-  //       headers: { Authorization: `Bearer ${token}` },
-  //     })
-  //     .then((res) => {
-  //       setUser(res.data);
-  //     })
-  //     .catch((err) => console.error("User fetch error:", err));
-  // }, [token]);
-
   useEffect(() => {
     if (!token) return;
 
     // fetch notifications
     API.get("/admin/notifications")
-      .then((res) => setNotifications(res.data))
-      .catch((err) => console.error("Notifications error:", err));
+      .then((res) => {
+        const notificationData = Array.isArray(res.data) ? res.data : [];
 
-    // fetch logged-in admin details
+        const sortedNotifications = notificationData.sort((a, b) => {
+          const dateA = new Date(a.createdAt || a.timestamp || 0);
+          const dateB = new Date(b.createdAt || b.timestamp || 0);
+          return dateB - dateA;
+        });
+        setNotifications(sortedNotifications);
+      })
+      .catch((err) => {
+        console.error("Notifications error:", err);
+        setNotifications([]);
+      });
+
     API.get("/employee/me")
       .then((res) => {
         setUser(res.data);
       })
-      .catch((err) => console.error("User fetch error:", err));
+      .catch((err) => {
+        console.error("User fetch error:", err);
+      });
   }, [token]);
 
-  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest(".notification-wrapper")) {
@@ -79,7 +69,6 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  // Get appropriate title based on screen size
   const getTitle = () => {
     if (window.innerWidth <= 320) {
       return "DCD - SL";
@@ -101,7 +90,6 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
     }
   };
 
-  // helper: get initials
   const getInitials = (name) => {
     if (!name) return "A";
     return name
@@ -135,7 +123,6 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
   return (
     <div className="header">
       <div className="header-left">
-        {/* Menu button for mobile */}
         <button
           className="menu-button"
           onClick={onMenuToggle}
@@ -152,7 +139,6 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
       </div>
 
       <div className="header-right">
-        {/* Notifications */}
         <div
           className="notification-wrapper"
           onClick={handleNotificationToggle}
@@ -185,7 +171,6 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
         </div>
       </div>
 
-      {/* Modal */}
       {selectedNotification && (
         <div
           className="modal-overlay"
@@ -199,15 +184,21 @@ export default function AdminNavbar({ onMenuToggle, isSidebarOpen }) {
             >
               ✖
             </button>
-            <h3>Password Change Details</h3>
+            <h3>Password Change Request</h3>
             <p>
               <strong>Email:</strong> {selectedNotification.email}
             </p>
             <p>
-              <strong>Old Password:</strong> {selectedNotification.oldPassword}
+              <strong>Message:</strong> {selectedNotification.message}
             </p>
             <p>
-              <strong>New Password:</strong> {selectedNotification.newPassword}
+              <strong>Date:</strong>{" "}
+              {selectedNotification.createdAt || selectedNotification.timestamp
+                ? new Date(
+                    selectedNotification.createdAt ||
+                      selectedNotification.timestamp
+                  ).toLocaleString()
+                : "N/A"}
             </p>
           </div>
         </div>
