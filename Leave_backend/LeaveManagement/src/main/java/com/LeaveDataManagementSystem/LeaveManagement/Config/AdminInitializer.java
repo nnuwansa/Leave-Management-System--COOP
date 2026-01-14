@@ -1,3 +1,5 @@
+
+
 package com.LeaveDataManagementSystem.LeaveManagement.Config;
 
 import com.LeaveDataManagementSystem.LeaveManagement.Model.User;
@@ -5,6 +7,7 @@ import com.LeaveDataManagementSystem.LeaveManagement.Repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -17,6 +20,9 @@ public class AdminInitializer implements CommandLineRunner {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Value("${admin.emails:}")
     private String adminEmailsStr;
@@ -34,7 +40,7 @@ public class AdminInitializer implements CommandLineRunner {
             return;
         }
 
-        // Parse comma-separated values
+
         List<String> adminEmails = Arrays.stream(adminEmailsStr.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -59,7 +65,7 @@ public class AdminInitializer implements CommandLineRunner {
             return;
         }
 
-        // Get all existing admins
+
         List<User> allUsers = userRepository.findAll();
         List<String> existingAdminEmails = allUsers.stream()
                 .filter(user -> user.getRoles() != null && user.getRoles().contains("ADMIN"))
@@ -77,39 +83,67 @@ public class AdminInitializer implements CommandLineRunner {
         // Create or update each admin
         for (int i = 0; i < adminEmails.size(); i++) {
             String email = adminEmails.get(i);
-            String password = adminPasswords.get(i);
+            String plainPassword = adminPasswords.get(i);  
             String name = (adminNames.size() > i) ? adminNames.get(i) : "Admin " + (i + 1);
 
             if (!userRepository.existsById(email)) {
+                // ✅ CREATE NEW ADMIN WITH ENCODED PASSWORD
                 User admin = new User();
                 admin.setEmail(email);
-                admin.setPassword(password);
+                admin.setPassword(passwordEncoder.encode(plainPassword));
                 admin.setName(name);
                 admin.setFullName(name);
-                admin.setRoles(Set.of("ADMIN"));
+                admin.setRoles(Set.of("ADMIN", "EMPLOYEE"));
                 admin.setDesignation("Administrator");
+                admin.setDepartment("Administration");
 
                 userRepository.save(admin);
-                System.out.println("✅ Admin user created: " + email);
+                System.out.println(" Admin user created: " + email + " (password BCrypt encoded)");
             } else {
+                //  UPDATE EXISTING ADMIN
                 User existingAdmin = userRepository.findById(email).orElse(null);
                 if (existingAdmin != null) {
-                    existingAdmin.setPassword(password);
+                    String currentPassword = existingAdmin.getPassword();
+
+                    // Check if password needs to be updated (is it BCrypt encoded?)
+                    boolean isBCrypt = currentPassword.startsWith("$2a$") ||
+                            currentPassword.startsWith("$2b$") ||
+                            currentPassword.startsWith("$2y$");
+
+                    if (!isBCrypt) {
+                        // Password is plain text - encode it!
+                        System.out.println("⚠️  Fixing plain text password for: " + email);
+                        existingAdmin.setPassword(passwordEncoder.encode(plainPassword));
+                        System.out.println("✅ Password fixed with BCrypt encoding");
+                    } else {
+                        // Check if we need to update to a new password
+                        // Only update if the plain password from config has changed
+                        // For now, we'll keep existing BCrypt password
+                        System.out.println("ℹ️  Keeping existing BCrypt password for: " + email);
+                    }
+
                     existingAdmin.setName(name);
                     existingAdmin.setFullName(name);
-                    //  Ensure department and designation are set on update too
+
+                    // Ensure department and designation are set on update too
                     if (existingAdmin.getDepartment() == null) {
                         existingAdmin.setDepartment("Administration");
                     }
                     if (existingAdmin.getDesignation() == null) {
                         existingAdmin.setDesignation("Administrator");
                     }
+
+                    // Ensure ADMIN and EMPLOYEE roles exist
+                    if (existingAdmin.getRoles() == null || !existingAdmin.getRoles().contains("ADMIN")) {
+                        existingAdmin.setRoles(Set.of("ADMIN", "EMPLOYEE"));
+                    }
+
                     userRepository.save(existingAdmin);
                     System.out.println("🔄 Admin user updated: " + email);
                 }
             }
         }
 
-        System.out.println("✅ Total admins configured: " + adminEmails.size());
+
     }
 }
