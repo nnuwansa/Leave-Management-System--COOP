@@ -10,6 +10,8 @@ export default function EmployeeAdmin() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
 
+  const [departmentsFromDB, setDepartmentsFromDB] = useState([]);
+
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [designationFilter, setDesignationFilter] = useState("");
@@ -30,8 +32,22 @@ export default function EmployeeAdmin() {
     }
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const res = await API.get("/departments");
+      console.log("Fetched departments:", res.data);
+      setDepartmentsFromDB(res.data);
+    } catch (err) {
+      console.error(
+        "❌ Fetch departments error:",
+        err.response?.data || err.message
+      );
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchDepartments();
   }, []);
 
   useEffect(() => {
@@ -81,7 +97,6 @@ export default function EmployeeAdmin() {
   const currentRows = filteredUsers.slice(indexOfFirstRow, indexOfLastRow);
   const totalPages = Math.ceil(filteredUsers.length / rowsPerPage);
 
-  // Fixed EditEmployee component - moved inside the main component
   const EditEmployee = ({ user, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({ ...user });
 
@@ -130,6 +145,7 @@ export default function EmployeeAdmin() {
             value={formData.password || ""}
             onChange={handleChange}
             type="password"
+            placeholder="Leave blank to keep current password"
           />{" "}
         </label>
 
@@ -156,6 +172,7 @@ export default function EmployeeAdmin() {
           />{" "}
         </label>
 
+        {/* Department dropdown with database departments */}
         <label>
           Department:
           <select
@@ -164,9 +181,11 @@ export default function EmployeeAdmin() {
             onChange={handleChange}
           >
             <option value="">Select Department</option>
-            <option value="HR">HR</option>
-            <option value="Finance">Finance</option>
-            <option value="Marketing">Marketing</option>
+            {departmentsFromDB.map((dept) => (
+              <option key={dept.id} value={dept.name}>
+                {dept.name}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -297,7 +316,6 @@ export default function EmployeeAdmin() {
     );
   };
 
-  // Debug function to check state
   const handleAddEmployeeClick = () => {
     console.log("Add Employee clicked, setting isAdding to true");
     setIsAdding(true);
@@ -450,7 +468,7 @@ export default function EmployeeAdmin() {
         </button>
       </div>
 
-      {/* Add Employee Modal - Fixed */}
+      {/* Add Employee Modal */}
       {isAdding && (
         <div className="modal-overlay">
           <div className="modal">
@@ -471,17 +489,17 @@ export default function EmployeeAdmin() {
                 fetchUsers();
                 setIsAdding(false);
               }}
+              departments={departmentsFromDB}
             />
           </div>
         </div>
       )}
 
-      {/* Edit Employee Modal - Fixed */}
+      {/* Edit Employee Modal */}
       {selectedUser && (
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              {/* <h2>Edit Employee</h2> */}
               <button
                 className="btn-close"
                 onClick={() => {
