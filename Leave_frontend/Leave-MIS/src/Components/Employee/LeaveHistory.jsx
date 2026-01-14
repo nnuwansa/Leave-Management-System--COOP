@@ -885,7 +885,7 @@ const MobileLeaveCard = ({
               leave.shortLeaveStartTime,
               leave.shortLeaveEndTime,
               leave.halfDayPeriod,
-              leave.workingDays 
+              leave.workingDays
             )}
           </div>
         </div>
@@ -1181,141 +1181,66 @@ const LeaveHistory = () => {
     return displayNames[leaveType] || leaveType.replace("_", " ");
   };
 
-  // const calculateDuration = (
-  //   leaveType,
-  //   startDate,
-  //   endDate,
-  //   shortLeaveStartTime,
-  //   shortLeaveEndTime,
-  //   halfDayPeriod
-  // ) => {
-  //   if (leaveType === "HALF_DAY") {
-  //     return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
-  //   } else if (leaveType === "SHORT" || leaveType === "SHORT_LEAVE") {
-  //     if (shortLeaveStartTime && shortLeaveEndTime) {
-  //       const start = new Date(`${startDate}T${shortLeaveStartTime}`);
-  //       const end = new Date(`${startDate}T${shortLeaveEndTime}`);
-  //       const diffHours = (end - start) / (1000 * 60 * 60);
-  //       const options = { hour: "2-digit", minute: "2-digit" };
-  //       const startStr = start.toLocaleTimeString([], options);
-  //       const endStr = end.toLocaleTimeString([], options);
-  //       return `${diffHours.toFixed(2)} hours (${startStr} - ${endStr})`;
-  //     }
-  //     return "Short duration";
-  //   } else {
-  //     const start = new Date(startDate);
-  //     const end = new Date(endDate);
-  //     const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-  //     if (days === 0.5) return "0.5 day";
-  //     if (days === 1) return "1 day";
-  //     return `${days} days`;
-  //   }
-  // };
+  const calculateDuration = (
+    leaveType,
+    startDate,
+    endDate,
+    shortLeaveStartTime,
+    shortLeaveEndTime,
+    halfDayPeriod,
+    workingDays
+  ) => {
+    if (leaveType === "HALF_DAY") {
+      return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
+    } else if (leaveType === "SHORT" || leaveType === "SHORT_LEAVE") {
+      if (shortLeaveStartTime && shortLeaveEndTime) {
+        const start = new Date(`${startDate}T${shortLeaveStartTime}`);
+        const end = new Date(`${startDate}T${shortLeaveEndTime}`);
+        const diffHours = (end - start) / (1000 * 60 * 60);
+        const options = { hour: "2-digit", minute: "2-digit" };
+        const startStr = start.toLocaleTimeString([], options);
+        const endStr = end.toLocaleTimeString([], options);
+        return `${diffHours.toFixed(2)} hours (${startStr} - ${endStr})`;
+      }
+      return "Short duration";
+    } else {
+      // ✅ USE WORKING DAYS IF AVAILABLE
+      if (
+        workingDays !== undefined &&
+        workingDays !== null &&
+        workingDays > 0
+      ) {
+        if (workingDays === 0.5) return "0.5 working day";
+        if (workingDays === 1) return "1 working day";
+        return `${workingDays} working days`;
+      }
 
-  // const calculateDuration = (
-  //   leaveType,
-  //   startDate,
-  //   endDate,
-  //   shortLeaveStartTime,
-  //   shortLeaveEndTime,
-  //   halfDayPeriod
-  // ) => {
-  //   if (leaveType === "HALF_DAY") {
-  //     return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
-  //   } else if (leaveType === "SHORT" || leaveType === "SHORT_LEAVE") {
-  //     if (shortLeaveStartTime && shortLeaveEndTime) {
-  //       const start = new Date(`${startDate}T${shortLeaveStartTime}`);
-  //       const end = new Date(`${startDate}T${shortLeaveEndTime}`);
-  //       const diffHours = (end - start) / (1000 * 60 * 60);
-  //       const options = { hour: "2-digit", minute: "2-digit" };
-  //       const startStr = start.toLocaleTimeString([], options);
-  //       const endStr = end.toLocaleTimeString([], options);
-  //       return `${diffHours.toFixed(2)} hours (${startStr} - ${endStr})`;
-  //     }
-  //     return "Short duration";
-  //   } else {
-  //     // Check if endDate is missing or invalid
-  //     if (!endDate || endDate === "Invalid Date" || endDate === null) {
-  //       return "Pending end date from admin";
-  //     }
+      // Fallback: Check if endDate is missing or invalid
+      if (!endDate || endDate === "Invalid Date" || endDate === null) {
+        return "Pending end date from admin";
+      }
 
-  //     const start = new Date(startDate);
-  //     const end = new Date(endDate);
+      const start = new Date(startDate);
+      const end = new Date(endDate);
 
-  //     // Check if dates are valid
-  //     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-  //       return "Invalid date";
-  //     }
+      // Check if dates are valid
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return "Invalid date";
+      }
 
-  //     const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+      const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
-  //     // Check if calculation resulted in negative or unreasonable days
-  //     if (days < 0 || days > 1000) {
-  //       return "Pending end date";
-  //     }
+      // Check if calculation resulted in negative or unreasonable days
+      if (days < 0 || days > 1000) {
+        return "Pending end date";
+      }
 
-  //     if (days === 0.5) return "0.5 day";
-  //     if (days === 1) return "1 day";
-  //     return `${days} days`;
-  //   }
-  // };
-
-const calculateDuration = (
-  leaveType,
-  startDate,
-  endDate,
-  shortLeaveStartTime,
-  shortLeaveEndTime,
-  halfDayPeriod,
-  workingDays  // ADD THIS PARAMETER
-) => {
-  if (leaveType === "HALF_DAY") {
-    return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
-  } else if (leaveType === "SHORT" || leaveType === "SHORT_LEAVE") {
-    if (shortLeaveStartTime && shortLeaveEndTime) {
-      const start = new Date(`${startDate}T${shortLeaveStartTime}`);
-      const end = new Date(`${startDate}T${shortLeaveEndTime}`);
-      const diffHours = (end - start) / (1000 * 60 * 60);
-      const options = { hour: "2-digit", minute: "2-digit" };
-      const startStr = start.toLocaleTimeString([], options);
-      const endStr = end.toLocaleTimeString([], options);
-      return `${diffHours.toFixed(2)} hours (${startStr} - ${endStr})`;
+      if (days === 0.5) return "0.5 day";
+      if (days === 1) return "1 day";
+      return `${days} days`;
     }
-    return "Short duration";
-  } else {
-    // ✅ USE WORKING DAYS IF AVAILABLE
-    if (workingDays !== undefined && workingDays !== null && workingDays > 0) {
-      if (workingDays === 0.5) return "0.5 working day";
-      if (workingDays === 1) return "1 working day";
-      return `${workingDays} working days`;
-    }
+  };
 
-    // Fallback: Check if endDate is missing or invalid
-    if (!endDate || endDate === "Invalid Date" || endDate === null) {
-      return "Pending end date from admin";
-    }
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    // Check if dates are valid
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return "Invalid date";
-    }
-
-    const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-
-    // Check if calculation resulted in negative or unreasonable days
-    if (days < 0 || days > 1000) {
-      return "Pending end date";
-    }
-
-    if (days === 0.5) return "0.5 day";
-    if (days === 1) return "1 day";
-    return `${days} days`;
-  }
-};
- 
   // Updated filter function with enhanced search for leave types and cancelled status
   const getFilteredRequests = () => {
     return leaveRequests.filter((leave) => {
@@ -1963,7 +1888,6 @@ const calculateDuration = (
                                     leave.shortLeaveEndTime,
                                     leave.halfDayPeriod,
                                     leave.workingDays
-                                    
                                   )}
                                 </div>
                               </td>

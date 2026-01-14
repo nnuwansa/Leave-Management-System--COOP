@@ -3,7 +3,7 @@ import API from "../../API/axios";
 import "../CSS/Admin.css";
 import { FaEye, FaDownload } from "react-icons/fa";
 
-// Loading Dots Component
+// Loading
 const LoadingDots = ({ message = "Loading..." }) => {
   return (
     <div

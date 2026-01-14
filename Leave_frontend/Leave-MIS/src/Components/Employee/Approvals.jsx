@@ -829,36 +829,6 @@ const Approvals = () => {
     return employeeName;
   };
 
-  // // ---------------- API Utility ----------------
-  // const apiCall = async (endpoint, options = {}) => {
-  //   const config = {
-  //     method: "GET",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //       ...(token && { Authorization: `Bearer ${token}` }),
-  //     },
-  //     ...options,
-  //   };
-
-  //   const response = await fetch(`http://localhost:8080${endpoint}`, config);
-  //   const data = await response.text();
-
-  //   if (!response.ok)
-  //     throw new Error(data || `HTTP error! status: ${response.status}`);
-
-  //   try {
-  //     return JSON.parse(data);
-  //   } catch {
-  //     return data;
-  //   }
-  // };
-
-  // const API = {
-  //   get: (endpoint) => apiCall(endpoint),
-  //   post: (endpoint, data) =>
-  //     apiCall(endpoint, { method: "POST", body: JSON.stringify(data) }),
-  // };
-
   // Fetch all employee details from API
   const fetchEmployeeDetails = async () => {
     try {
@@ -910,37 +880,6 @@ const Approvals = () => {
     return displayNames[leaveType] || leaveType.replace("_", " ");
   };
 
-  // const calculateDuration = (
-  //   leaveType,
-  //   startDate,
-  //   endDate,
-  //   shortLeaveStartTime,
-  //   shortLeaveEndTime,
-  //   halfDayPeriod
-  // ) => {
-  //   if (leaveType === "HALF_DAY") {
-  //     return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
-  //   } else if (leaveType === "SHORT" || leaveType === "SHORT_LEAVE") {
-  //     if (shortLeaveStartTime && shortLeaveEndTime) {
-  //       const start = new Date(`${startDate}T${shortLeaveStartTime}`);
-  //       const end = new Date(`${startDate}T${shortLeaveEndTime}`);
-  //       const diffHours = (end - start) / (1000 * 60 * 60);
-  //       const options = { hour: "2-digit", minute: "2-digit" };
-  //       const startStr = start.toLocaleTimeString([], options);
-  //       const endStr = end.toLocaleTimeString([], options);
-  //       return `${diffHours.toFixed(2)} hours (${startStr} - ${endStr})`;
-  //     }
-  //     return "Short duration";
-  //   } else {
-  //     const start = new Date(startDate);
-  //     const end = new Date(endDate);
-  //     const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-  //     if (days === 0.5) return "0.5 day";
-  //     if (days === 1) return "1 day";
-  //     return `${days} days`;
-  //   }
-  // };
-
   const calculateDuration = (
     leaveType,
     startDate,
@@ -948,7 +887,7 @@ const Approvals = () => {
     shortLeaveStartTime,
     shortLeaveEndTime,
     halfDayPeriod,
-    workingDays // ADD THIS PARAMETER
+    workingDays
   ) => {
     if (leaveType === "HALF_DAY") {
       return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
@@ -964,7 +903,7 @@ const Approvals = () => {
       }
       return "Short duration";
     } else {
-      // ✅ USE WORKING DAYS IF AVAILABLE
+      //  USE WORKING DAYS IF AVAILABLE
       if (
         workingDays !== undefined &&
         workingDays !== null &&
