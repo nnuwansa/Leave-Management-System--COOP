@@ -10,6 +10,7 @@ import com.LeaveDataManagementSystem.LeaveManagement.Service.LeaveEntitlementSer
 import com.LeaveDataManagementSystem.LeaveManagement.Service.LeaveService;
 import com.LeaveDataManagementSystem.LeaveManagement.Config.JwtUtil;
 import com.LeaveDataManagementSystem.LeaveManagement.Service.NotificationService;
+import com.LeaveDataManagementSystem.LeaveManagement.Service.WorkingDayCalculator;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +48,9 @@ public class LeaveController {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private WorkingDayCalculator workingDayCalculator;
 
     // ---------------- Submit Leave ----------------
     @PostMapping("/submit")
@@ -662,7 +666,8 @@ public class LeaveController {
         }
     }
 
-    // ---------------- Get All Leaves for Admin ----------------
+
+
     @GetMapping("/all-leaves")
     public ResponseEntity<?> getAllLeavesForAdmin(@RequestHeader("Authorization") String token) {
         try {
@@ -695,6 +700,13 @@ public class LeaveController {
                 leaveData.put("isHalfDay", leave.isHalfDay());
                 leaveData.put("isShortLeave", leave.isShortLeave());
                 leaveData.put("isCancelled", leave.isCancelled());
+
+                // ✅ ADD WORKING DAYS INFORMATION
+                leaveData.put("workingDays", leave.getWorkingDays());
+                leaveData.put("totalDays", leave.getTotalDays());
+                leaveData.put("weekendDays", leave.getWeekendDays());
+                leaveData.put("publicHolidays", leave.getPublicHolidays());
+                leaveData.put("durationDisplay", leave.getDurationDisplay());
 
                 if (employee != null) {
                     leaveData.put("department", employee.getDepartment());
@@ -739,17 +751,47 @@ public class LeaveController {
                     leaveData.put("endTime", leave.getShortLeaveEndTime());
                 }
 
-                // Calculate leave duration
+//                // ✅ UPDATED: Calculate leave duration with working days info
+//                String leaveDuration;
+//                if (leave.isShortLeave()) {
+//                    leaveDuration = "Short Leave (0 days)";
+//                } else if (leave.isHalfDay()) {
+//                    leaveDuration = "Half Day (0.5 days)";
+//                } else if (leave.getWorkingDays() > 0) {
+//                    leaveDuration = String.format("%d working day%s (%d total)",
+//                            leave.getWorkingDays(),
+//                            leave.getWorkingDays() != 1 ? "s" : "",
+//                            leave.getTotalDays());
+//                } else if (leave.getStartDate() != null && leave.getEndDate() != null) {
+//                    long daysBetween = ChronoUnit.DAYS.between(leave.getStartDate(), leave.getEndDate()) + 1;
+//                    leaveDuration = daysBetween + " day" + (daysBetween != 1 ? "s" : "");
+//                } else {
+//                    leaveDuration = "1 day";
+//                }
+//                leaveData.put("leaveDuration", leaveDuration);
+
+
+                // ✅ Calculate leave duration with working days (recalculate if missing)
+                String leaveDuration;
                 if (leave.isShortLeave()) {
-                    leaveData.put("leaveDuration", "Short Leave");
+                    leaveDuration = "Short Leave";
                 } else if (leave.isHalfDay()) {
-                    leaveData.put("leaveDuration", "0.5 days");
+                    leaveDuration = "0.5 days";
                 } else if (leave.getStartDate() != null && leave.getEndDate() != null) {
-                    long daysBetween = ChronoUnit.DAYS.between(leave.getStartDate(), leave.getEndDate()) + 1;
-                    leaveData.put("leaveDuration", daysBetween + " day" + (daysBetween != 1 ? "s" : ""));
+                    // Check if workingDays is already stored (check for > 0 instead of != null)
+                    if (leave.getWorkingDays() > 0) {
+                        leaveDuration = leave.getWorkingDays() + " working day" + (leave.getWorkingDays() != 1 ? "s" : "");
+                    } else {
+                        // ✅ RECALCULATE for old records
+                        Map<String, Integer> breakdown = workingDayCalculator.calculateWorkingDays(
+                                leave.getStartDate(), leave.getEndDate());
+                        int workingDays = breakdown.get("workingDays");
+                        leaveDuration = workingDays + " working day" + (workingDays != 1 ? "s" : "");
+                    }
                 } else {
-                    leaveData.put("leaveDuration", "1 day");
+                    leaveDuration = "1 day";
                 }
+                leaveData.put("leaveDuration", leaveDuration);
 
                 return leaveData;
             }).collect(Collectors.toList());
@@ -761,7 +803,6 @@ public class LeaveController {
             return ResponseEntity.status(500).body("Failed to fetch leaves: " + e.getMessage());
         }
     }
-
     // ---------------- Validate Maternity Leave Request ----------------
     @PostMapping("/validate-maternity")
     public ResponseEntity<?> validateMaternityLeave(
@@ -1035,31 +1076,31 @@ public class LeaveController {
 
 
 
-@GetMapping("/history/acting")
-public ResponseEntity<?> getActingOfficerHistory(
-        @RequestHeader("Authorization") String token) {
-    try {
-        String email = jwtUtil.extractEmail(token.replace("Bearer ", ""));
+    @GetMapping("/history/acting")
+    public ResponseEntity<?> getActingOfficerHistory(
+            @RequestHeader("Authorization") String token) {
+        try {
+            String email = jwtUtil.extractEmail(token.replace("Bearer ", ""));
 
-        // Get all leaves where current user was acting officer and action was taken
-        List<Leave> actingHistory = leaveRepository.findByActingOfficerEmailOrderByCreatedAtDesc(email)
-                .stream()
-                .filter(leave -> leave.getActingOfficerStatus() != null &&
-                        leave.getActingOfficerStatus() != ActingOfficerStatus.PENDING)
-                .collect(Collectors.toList());
+            // Get all leaves where current user was acting officer and action was taken
+            List<Leave> actingHistory = leaveRepository.findByActingOfficerEmailOrderByCreatedAtDesc(email)
+                    .stream()
+                    .filter(leave -> leave.getActingOfficerStatus() != null &&
+                            leave.getActingOfficerStatus() != ActingOfficerStatus.PENDING)
+                    .collect(Collectors.toList());
 
-        // Convert to response DTOs
-        List<LeaveResponse> response = actingHistory.stream()
-                .map(LeaveResponse::new)
-                .collect(Collectors.toList());
+            // Convert to response DTOs
+            List<LeaveResponse> response = actingHistory.stream()
+                    .map(LeaveResponse::new)
+                    .collect(Collectors.toList());
 
-        return ResponseEntity.ok(response);
+            return ResponseEntity.ok(response);
 
-    } catch (Exception e) {
-        logger.error("Error fetching acting officer history: {}", e.getMessage(), e);
-        return ResponseEntity.badRequest().body("❌ Failed to fetch history");
+        } catch (Exception e) {
+            logger.error("Error fetching acting officer history: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body("❌ Failed to fetch history");
+        }
     }
-}
 
     @GetMapping("/history/supervising")
     public ResponseEntity<?> getSupervisingOfficerHistory(
@@ -1110,6 +1151,37 @@ public ResponseEntity<?> getActingOfficerHistory(
         } catch (Exception e) {
             logger.error("Error fetching approval officer history: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body("❌ Failed to fetch history");
+        }
+    }
+
+    // ADD this endpoint to LeaveController
+    @PostMapping("/calculate-working-days")
+    public ResponseEntity<?> calculateWorkingDays(
+            @RequestHeader("Authorization") String token,
+            @RequestBody Map<String, Object> request) {
+        try {
+            LocalDate startDate = LocalDate.parse((String) request.get("startDate"));
+            LocalDate endDate = LocalDate.parse((String) request.get("endDate"));
+
+            WorkingDayCalculator.LeaveDayBreakdown breakdown =
+                    workingDayCalculator.getLeaveBreakdown(startDate, endDate);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("totalDays", breakdown.getTotalDays());
+            response.put("workingDays", breakdown.getWorkingDays());
+            response.put("weekendDays", breakdown.getWeekendDays());
+            response.put("publicHolidays", breakdown.getPublicHolidays());
+            response.put("message", String.format(
+                    "Leave period: %d working days (excluding %d weekends and %d holidays)",
+                    breakdown.getWorkingDays(),
+                    breakdown.getWeekendDays(),
+                    breakdown.getPublicHolidays()
+            ));
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("❌ Failed to calculate working days");
         }
     }
 

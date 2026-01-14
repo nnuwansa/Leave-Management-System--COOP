@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/admin")
-@CrossOrigin(origins = "http://localhost:5173")
+@CrossOrigin()
 public class AdminController {
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
 
@@ -127,16 +127,29 @@ public class AdminController {
                 leaveData.put("approvalOfficerName", leave.getApprovalOfficerName());
                 leaveData.put("approvalOfficerStatus", leave.getApprovalOfficerStatus());
 
+                // ✅ ADD WORKING DAYS INFORMATION
+                leaveData.put("workingDays", leave.getWorkingDays());
+                leaveData.put("totalDays", leave.getTotalDays());
+                leaveData.put("weekendDays", leave.getWeekendDays());
+                leaveData.put("publicHolidays", leave.getPublicHolidays());
+
+                // ✅ UPDATED: Calculate duration using working days
+                String leaveDuration;
                 if (leave.isShortLeave()) {
-                    leaveData.put("leaveDuration", "Short Leave");
+                    leaveDuration = "Short Leave";
                 } else if (leave.isHalfDay()) {
-                    leaveData.put("leaveDuration", "0.5 days");
+                    leaveDuration = "0.5 days";
+                } else if (leave.getWorkingDays() > 0) {
+                    // Use stored working days
+                    leaveDuration = leave.getWorkingDays() + " working day" + (leave.getWorkingDays() != 1 ? "s" : "");
                 } else if (leave.getStartDate() != null && leave.getEndDate() != null) {
+                    // Fallback to calendar days for old records
                     long daysBetween = ChronoUnit.DAYS.between(leave.getStartDate(), leave.getEndDate()) + 1;
-                    leaveData.put("leaveDuration", daysBetween + " day" + (daysBetween != 1 ? "s" : ""));
+                    leaveDuration = daysBetween + " day" + (daysBetween != 1 ? "s" : "");
                 } else {
-                    leaveData.put("leaveDuration", "1 day");
+                    leaveDuration = "N/A";
                 }
+                leaveData.put("leaveDuration", leaveDuration);
 
                 return leaveData;
             }).collect(Collectors.toList());

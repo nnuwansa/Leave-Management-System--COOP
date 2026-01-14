@@ -83,7 +83,7 @@ public class AdminInitializer implements CommandLineRunner {
         // Create or update each admin
         for (int i = 0; i < adminEmails.size(); i++) {
             String email = adminEmails.get(i);
-            String plainPassword = adminPasswords.get(i);  
+            String plainPassword = adminPasswords.get(i);
             String name = (adminNames.size() > i) ? adminNames.get(i) : "Admin " + (i + 1);
 
             if (!userRepository.existsById(email)) {

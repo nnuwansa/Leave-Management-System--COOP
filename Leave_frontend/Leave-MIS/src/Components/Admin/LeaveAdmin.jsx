@@ -339,7 +339,25 @@ Error: ${err.response?.data || err.message}`);
     return status?.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
   };
 
-  const calculateLeaveDays = (startDate, endDate, duration) => {
+  // const calculateLeaveDays = (startDate, endDate, duration) => {
+  //   if (duration) return duration;
+  //   if (!startDate || !endDate) return "N/A";
+
+  //   const start = new Date(startDate);
+  //   const end = new Date(endDate);
+  //   const diffTime = Math.abs(end - start);
+  //   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  //   return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
+  // };
+
+  const calculateLeaveDays = (startDate, endDate, duration, workingDays) => {
+    // ✅ USE WORKING DAYS IF AVAILABLE
+    if (workingDays !== undefined && workingDays !== null && workingDays > 0) {
+      if (workingDays === 0.5) return "0.5 working day";
+      if (workingDays === 1) return "1 working day";
+      return `${workingDays} working days`;
+    }
+
     if (duration) return duration;
     if (!startDate || !endDate) return "N/A";
 
@@ -376,7 +394,8 @@ Error: ${err.response?.data || err.message}`);
           calculateLeaveDays(
             leave.startDate,
             leave.endDate,
-            leave.leaveDuration
+            leave.leaveDuration,
+            leave.workingDays
           ),
           formatStatus(leave.status),
           `"${leave.reason || ""}"`,
@@ -462,7 +481,8 @@ Error: ${err.response?.data || err.message}`);
                   {calculateLeaveDays(
                     leave.startDate,
                     leave.endDate,
-                    leave.leaveDuration
+                    leave.leaveDuration,
+                    leave.workingDays // ADD THIS
                   )}
                 </p>
                 <p>
@@ -883,7 +903,8 @@ Error: ${err.response?.data || err.message}`);
                       {calculateLeaveDays(
                         leave.startDate,
                         leave.endDate,
-                        leave.leaveDuration
+                        leave.leaveDuration,
+                        leave.workingDays
                       )}
                     </td>
                     <td>

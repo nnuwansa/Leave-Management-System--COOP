@@ -910,13 +910,45 @@ const Approvals = () => {
     return displayNames[leaveType] || leaveType.replace("_", " ");
   };
 
+  // const calculateDuration = (
+  //   leaveType,
+  //   startDate,
+  //   endDate,
+  //   shortLeaveStartTime,
+  //   shortLeaveEndTime,
+  //   halfDayPeriod
+  // ) => {
+  //   if (leaveType === "HALF_DAY") {
+  //     return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
+  //   } else if (leaveType === "SHORT" || leaveType === "SHORT_LEAVE") {
+  //     if (shortLeaveStartTime && shortLeaveEndTime) {
+  //       const start = new Date(`${startDate}T${shortLeaveStartTime}`);
+  //       const end = new Date(`${startDate}T${shortLeaveEndTime}`);
+  //       const diffHours = (end - start) / (1000 * 60 * 60);
+  //       const options = { hour: "2-digit", minute: "2-digit" };
+  //       const startStr = start.toLocaleTimeString([], options);
+  //       const endStr = end.toLocaleTimeString([], options);
+  //       return `${diffHours.toFixed(2)} hours (${startStr} - ${endStr})`;
+  //     }
+  //     return "Short duration";
+  //   } else {
+  //     const start = new Date(startDate);
+  //     const end = new Date(endDate);
+  //     const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+  //     if (days === 0.5) return "0.5 day";
+  //     if (days === 1) return "1 day";
+  //     return `${days} days`;
+  //   }
+  // };
+
   const calculateDuration = (
     leaveType,
     startDate,
     endDate,
     shortLeaveStartTime,
     shortLeaveEndTime,
-    halfDayPeriod
+    halfDayPeriod,
+    workingDays // ADD THIS PARAMETER
   ) => {
     if (leaveType === "HALF_DAY") {
       return `0.5 day (${halfDayPeriod || "MORNING"} period)`;
@@ -932,6 +964,17 @@ const Approvals = () => {
       }
       return "Short duration";
     } else {
+      // ✅ USE WORKING DAYS IF AVAILABLE
+      if (
+        workingDays !== undefined &&
+        workingDays !== null &&
+        workingDays > 0
+      ) {
+        if (workingDays === 0.5) return "0.5 working day";
+        if (workingDays === 1) return "1 working day";
+        return `${workingDays} working days`;
+      }
+
       const start = new Date(startDate);
       const end = new Date(endDate);
       const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
@@ -1891,7 +1934,8 @@ const Approvals = () => {
                                           leave.endDate,
                                           leave.shortLeaveStartTime,
                                           leave.shortLeaveEndTime,
-                                          leave.halfDayPeriod
+                                          leave.halfDayPeriod,
+                                          leave.workingDays
                                         )}
                                       </div>
                                     </div>
@@ -2347,7 +2391,8 @@ const Approvals = () => {
                                           leave.endDate,
                                           leave.shortLeaveStartTime,
                                           leave.shortLeaveEndTime,
-                                          leave.halfDayPeriod
+                                          leave.halfDayPeriod,
+                                          leave.workingDays
                                         )}
                                       </div>
                                     </div>

@@ -152,51 +152,7 @@ public class LeaveEntitlementService {
         }
     }
 
-    // ------------------- UPDATE ENTITLEMENTS (SUPPORTS UNLIMITED DUTY) -------------------
-    public void updateEntitlementOnLeaveApproval(String employeeEmail, String leaveType,
-                                                 LocalDate startDate, LocalDate endDate,
-                                                 boolean isShortLeave, boolean isHalfDay) {
 
-        int currentYear = LocalDate.now().getYear();
-
-        // Handle short leaves (both "SHORT" and "SHORT_LEAVE")
-        if (isShortLeave || "SHORT".equals(leaveType) || "SHORT_LEAVE".equals(leaveType)) {
-            updateShortLeaveEntitlementOnApproval(employeeEmail, startDate);
-            return; // No regular entitlement deduction for short leaves
-        }
-
-        // For half-day leaves, use CASUAL leave type
-        String actualLeaveType = ("HALF_DAY".equals(leaveType) || isHalfDay) ? "CASUAL" : leaveType;
-
-        // Calculate leave days
-        double leaveDays;
-        if ("HALF_DAY".equals(leaveType) || isHalfDay) {
-            leaveDays = 0.5; // Half day = 0.5 days
-        } else {
-            leaveDays = calculateDays(startDate, endDate);
-        }
-
-        Optional<LeaveEntitlement> entitlementOpt = leaveEntitlementRepository
-                .findByEmployeeEmailAndLeaveTypeAndYear(employeeEmail, actualLeaveType, currentYear);
-
-        if (entitlementOpt.isPresent()) {
-            LeaveEntitlement entitlement = entitlementOpt.get();
-
-            if ("HALF_DAY".equals(leaveType) || isHalfDay) {
-                // For half days, use the special half day tracking
-                entitlement.addHalfDay();
-            } else {
-                // For regular leaves, update used days normally (works for both limited and unlimited)
-                entitlement.updateUsedDays(leaveDays);
-            }
-
-            leaveEntitlementRepository.save(entitlement);
-
-            logger.info("Updated entitlement for {} - Type: {}, Used Days: {}, Remaining: {}, Is Unlimited: {}",
-                    employeeEmail, actualLeaveType, entitlement.getUsedDays(),
-                    entitlement.getRemainingDaysDisplay(), entitlement.isUnlimited());
-        }
-    }
 
     // ------------------- UPDATE SHORT LEAVE ENTITLEMENT -------------------
     private void updateShortLeaveEntitlementOnApproval(String employeeEmail, LocalDate date) {
@@ -216,42 +172,92 @@ public class LeaveEntitlementService {
         }
     }
 
-    // Overloaded method for backward compatibility
+
+
+    // ------------------- UPDATE ENTITLEMENTS (SUPPORTS UNLIMITED DUTY) -------------------
     public void updateEntitlementOnLeaveApproval(String employeeEmail, String leaveType,
-                                                 LocalDate startDate, LocalDate endDate) {
-        boolean isHalfDay = "HALF_DAY".equals(leaveType);
-        boolean isShortLeave = "SHORT".equals(leaveType) || "SHORT_LEAVE".equals(leaveType);
-        updateEntitlementOnLeaveApproval(employeeEmail, leaveType, startDate, endDate, isShortLeave, isHalfDay);
-    }
-
-    // ------------------- REVERT ENTITLEMENTS (SUPPORTS UNLIMITED DUTY) -------------------
-    public void revertEntitlementOnLeaveRejection(String employeeEmail, String leaveType,
-                                                  LocalDate startDate, LocalDate endDate,
-                                                  boolean isShortLeave, boolean isHalfDay) {
-
-        logger.info("Starting entitlement reversion for employee: {}, leaveType: {}, startDate: {}, endDate: {}, isShortLeave: {}, isHalfDay: {}",
-                employeeEmail, leaveType, startDate, endDate, isShortLeave, isHalfDay);
+                                                 LocalDate startDate, LocalDate endDate,
+                                                 boolean isShortLeave, boolean isHalfDay,
+                                                 int workingDays) {  // ADD workingDays parameter
 
         int currentYear = LocalDate.now().getYear();
 
         // Handle short leaves (both "SHORT" and "SHORT_LEAVE")
         if (isShortLeave || "SHORT".equals(leaveType) || "SHORT_LEAVE".equals(leaveType)) {
-            logger.info("Reverting short leave entitlement for employee: {}", employeeEmail);
-            revertShortLeaveEntitlementOnRejection(employeeEmail, startDate);
+            updateShortLeaveEntitlementOnApproval(employeeEmail, startDate);
             return;
         }
 
         // For half-day leaves, use CASUAL leave type
         String actualLeaveType = ("HALF_DAY".equals(leaveType) || isHalfDay) ? "CASUAL" : leaveType;
 
-        logger.info("Actual leave type for reversion: {} (original: {})", actualLeaveType, leaveType);
-
-        // Calculate leave days
+        // Calculate leave days - USE workingDays parameter instead of calculateDays
         double leaveDays;
         if ("HALF_DAY".equals(leaveType) || isHalfDay) {
             leaveDays = 0.5;
         } else {
-            leaveDays = calculateDays(startDate, endDate);
+            leaveDays = workingDays; // USE workingDays instead of calculateDays(startDate, endDate)
+        }
+
+        Optional<LeaveEntitlement> entitlementOpt = leaveEntitlementRepository
+                .findByEmployeeEmailAndLeaveTypeAndYear(employeeEmail, actualLeaveType, currentYear);
+
+        if (entitlementOpt.isPresent()) {
+            LeaveEntitlement entitlement = entitlementOpt.get();
+
+            if ("HALF_DAY".equals(leaveType) || isHalfDay) {
+                entitlement.addHalfDay();
+            } else {
+                entitlement.updateUsedDays(leaveDays);
+            }
+
+            leaveEntitlementRepository.save(entitlement);
+
+            logger.info("Updated entitlement for {} - Type: {}, Used Days: {}, Remaining: {}, Is Unlimited: {}",
+                    employeeEmail, actualLeaveType, entitlement.getUsedDays(),
+                    entitlement.getRemainingDaysDisplay(), entitlement.isUnlimited());
+        }
+    }
+
+    // Overloaded method for backward compatibility
+    public void updateEntitlementOnLeaveApproval(String employeeEmail, String leaveType,
+                                                 LocalDate startDate, LocalDate endDate) {
+        boolean isHalfDay = "HALF_DAY".equals(leaveType);
+        boolean isShortLeave = "SHORT".equals(leaveType) || "SHORT_LEAVE".equals(leaveType);
+        int workingDays = calculateDays(startDate, endDate); // Fallback to old calculation
+        updateEntitlementOnLeaveApproval(employeeEmail, leaveType, startDate, endDate, isShortLeave, isHalfDay, workingDays);
+    }
+
+
+
+
+    // ------------------- REVERT ENTITLEMENTS (SUPPORTS UNLIMITED DUTY) -------------------
+    public void revertEntitlementOnLeaveRejection(String employeeEmail, String leaveType,
+                                                  LocalDate startDate, LocalDate endDate,
+                                                  boolean isShortLeave, boolean isHalfDay,
+                                                  int workingDays) {  // ADD workingDays parameter
+
+        logger.info("Starting entitlement reversion for employee: {}, leaveType: {}, startDate: {}, endDate: {}, isShortLeave: {}, isHalfDay: {}, workingDays: {}",
+                employeeEmail, leaveType, startDate, endDate, isShortLeave, isHalfDay, workingDays);
+
+        int currentYear = LocalDate.now().getYear();
+
+        if (isShortLeave || "SHORT".equals(leaveType) || "SHORT_LEAVE".equals(leaveType)) {
+            logger.info("Reverting short leave entitlement for employee: {}", employeeEmail);
+            revertShortLeaveEntitlementOnRejection(employeeEmail, startDate);
+            return;
+        }
+
+        String actualLeaveType = ("HALF_DAY".equals(leaveType) || isHalfDay) ? "CASUAL" : leaveType;
+
+        logger.info("Actual leave type for reversion: {} (original: {})", actualLeaveType, leaveType);
+
+        // Calculate leave days - USE workingDays parameter
+        double leaveDays;
+        if ("HALF_DAY".equals(leaveType) || isHalfDay) {
+            leaveDays = 0.5;
+        } else {
+            leaveDays = workingDays; // USE workingDays instead of calculateDays
         }
 
         logger.info("Leave days to revert: {}", leaveDays);
@@ -266,16 +272,13 @@ public class LeaveEntitlementService {
                     entitlement.getUsedDays(), entitlement.getRemainingDaysDisplay(), entitlement.getAccumulatedHalfDays(), entitlement.isUnlimited());
 
             if ("HALF_DAY".equals(leaveType) || isHalfDay) {
-                // For half days, remove half day
                 entitlement.removeHalfDay();
                 logger.info("Reverted half day. After reversion: usedDays={}, accumulatedHalfDays={}",
                         entitlement.getUsedDays(), entitlement.getAccumulatedHalfDays());
             } else {
-                // For regular leaves, revert the used days (works for both limited and unlimited)
                 double oldUsedDays = entitlement.getUsedDays();
                 entitlement.setUsedDays(Math.max(0, entitlement.getUsedDays() - leaveDays));
 
-                // Update remaining days only for limited entitlements
                 if (!entitlement.isUnlimited()) {
                     entitlement.setRemainingDays(entitlement.getTotalEntitlement() - entitlement.getUsedDays());
                 }
@@ -299,9 +302,9 @@ public class LeaveEntitlementService {
                                                   LocalDate startDate, LocalDate endDate) {
         boolean isHalfDay = "HALF_DAY".equals(leaveType);
         boolean isShortLeave = "SHORT".equals(leaveType) || "SHORT_LEAVE".equals(leaveType);
-        revertEntitlementOnLeaveRejection(employeeEmail, leaveType, startDate, endDate, isShortLeave, isHalfDay);
+        int workingDays = calculateDays(startDate, endDate); // Fallback
+        revertEntitlementOnLeaveRejection(employeeEmail, leaveType, startDate, endDate, isShortLeave, isHalfDay, workingDays);
     }
-
     // ------------------- REVERT SHORT LEAVE ENTITLEMENT -------------------
     private void revertShortLeaveEntitlementOnRejection(String employeeEmail, LocalDate date) {
         int year = date.getYear();
@@ -684,10 +687,8 @@ public class LeaveEntitlementService {
     }
 
 
-    /**
-     * Get monthly short leave breakdown for an employee for the current year
-     */
-    /**
+
+    /*
      * Get monthly short leave breakdown for an employee for the current year (SAFE VERSION)
      */
     public Map<String, Object> getEmployeeShortLeaveMonthlyBreakdown(String employeeEmail) {
@@ -743,45 +744,69 @@ public class LeaveEntitlementService {
         }
     }
 
-
+    // Add these methods to your LeaveEntitlementService class:
 
     /**
-     * Get monthly short leave breakdown for an employee for the current year
+     * Get or create leave entitlement for employee
      */
-//    public Map<String, Object> getEmployeeShortLeaveMonthlyBreakdown(String employeeEmail) {
-//        int currentYear = LocalDate.now().getYear();
-//        Map<String, Object> monthlyData = new HashMap<>();
-//
-//        String[] monthNames = {"January", "February", "March", "April", "May", "June",
-//                "July", "August", "September", "October", "November", "December"};
-//
-//        for (int month = 1; month <= 12; month++) {
-//            // Initialize short leave entitlement for the month if not exists
-//            initializeShortLeaveEntitlementForMonth(employeeEmail, currentYear, month);
-//
-//            // Get short leave entitlement for the month
-//            Optional<ShortLeaveEntitlement> shortLeaveOpt =
-//                    shortLeaveEntitlementRepository.findByEmployeeEmailAndYearAndMonth(employeeEmail, currentYear, month);
-//
-//            if (shortLeaveOpt.isPresent()) {
-//                ShortLeaveEntitlement shortLeave = shortLeaveOpt.get();
-//                Map<String, Integer> monthData = new HashMap<>();
-//                monthData.put("used", shortLeave.getUsedShortLeaves());
-//                monthData.put("total", shortLeave.getTotalShortLeaves());
-//                monthData.put("remaining", shortLeave.getRemainingShortLeaves());
-//
-//                monthlyData.put(monthNames[month - 1], monthData);
-//            } else {
-//                // Default values if not found
-//                Map<String, Integer> monthData = new HashMap<>();
-//                monthData.put("used", 0);
-//                monthData.put("total", 2);
-//                monthData.put("remaining", 2);
-//
-//                monthlyData.put(monthNames[month - 1], monthData);
-//            }
-//        }
-//
-//        return monthlyData;
-//    }
+    private LeaveEntitlement getOrCreateEntitlement(String employeeEmail, String leaveType, int year) {
+        Optional<LeaveEntitlement> entitlementOpt = leaveEntitlementRepository
+                .findByEmployeeEmailAndLeaveTypeAndYear(employeeEmail, leaveType, year);
+
+        if (entitlementOpt.isPresent()) {
+            return entitlementOpt.get();
+        }
+
+        // Create new entitlement if not exists
+        initializeEntitlementsForEmployee(employeeEmail);
+
+        return leaveEntitlementRepository
+                .findByEmployeeEmailAndLeaveTypeAndYear(employeeEmail, leaveType, year)
+                .orElseThrow(() -> new RuntimeException("Failed to create entitlement for " + leaveType));
+    }
+
+    /**
+     * Get display name for leave type
+     */
+    private String getLeaveTypeDisplayName(String leaveType) {
+        switch (leaveType) {
+            case "CASUAL":
+                return "Casual";
+            case "SICK":
+                return "Sick";
+            case "DUTY":
+                return "Duty";
+            case "MATERNITY":
+                return "Maternity";
+            case "HALF_DAY":
+                return "Half Day";
+            case "SHORT":
+            case "SHORT_LEAVE":
+                return "Short Leave";
+            default:
+                return leaveType.replace("_", " ");
+        }
+    }
+    // ADD this method to LeaveEntitlementService
+    public String validateLeaveRequestWithWorkingDays(String employeeEmail, String leaveType,
+                                                      LocalDate startDate, LocalDate endDate,
+                                                      int workingDays) {
+        // Get current entitlement
+        int currentYear = startDate.getYear();
+        LeaveEntitlement entitlement = getOrCreateEntitlement(employeeEmail, leaveType, currentYear);
+
+        double remainingDays = entitlement.getRemainingDays();
+
+        // Check if enough leave balance
+        if (workingDays > remainingDays) {
+            return String.format(
+                    "Insufficient %s leave balance. Requested: %d working days, Available: %.1f days",
+                    getLeaveTypeDisplayName(leaveType), workingDays, remainingDays
+            );
+        }
+
+        return "VALID";
+    }
+
+
 }

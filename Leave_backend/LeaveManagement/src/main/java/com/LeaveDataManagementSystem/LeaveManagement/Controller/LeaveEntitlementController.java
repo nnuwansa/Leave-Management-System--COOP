@@ -486,41 +486,4 @@ public class LeaveEntitlementController {
 
 
 
-    // ---------------- Get All Employee Entitlements with Monthly Data (Admin) ----------------
-//    @GetMapping("/admin/entitlements")
-//    public ResponseEntity<?> getAllEmployeeEntitlements(@RequestHeader("Authorization") String token) {
-//        try {
-//            List<User> allUsers = userRepository.findAll();
-//            List<Map<String, Object>> entitlementsWithDetails = new ArrayList<>();
-//
-//            for (User user : allUsers) {
-//                Map<String, Object> employeeData = new HashMap<>();
-//
-//                // Get employee details
-//                Map<String, Object> employeeDetails = new HashMap<>();
-//                employeeDetails.put("email", user.getEmail());
-//                employeeDetails.put("name", user.getName());
-//                employeeDetails.put("fullName", user.getFullName());
-//                employeeDetails.put("department", user.getDepartment());
-//                employeeDetails.put("designation", user.getDesignation());
-//
-//                // Get regular entitlements
-//                List<LeaveEntitlement> entitlements = leaveEntitlementService.getEmployeeEntitlements(user.getEmail());
-//
-//                // Get short leave monthly breakdown
-//                Map<String, Object> shortLeaveMonthlyDetails = leaveEntitlementService.getEmployeeShortLeaveMonthlyBreakdown(user.getEmail());
-//
-//                employeeData.put("employeeDetails", employeeDetails);
-//                employeeData.put("entitlements", entitlements);
-//                employeeData.put("shortLeaveMonthlyDetails", shortLeaveMonthlyDetails);
-//
-//                entitlementsWithDetails.add(employeeData);
-//            }
-//
-//            return ResponseEntity.ok(entitlementsWithDetails);
-//        } catch (Exception e) {
-//            logger.error("Failed to fetch all employee entitlements: {}", e.getMessage(), e);
-//            return ResponseEntity.badRequest().body("❌ Failed to fetch employee entitlements");
-//        }
-//    }
 }

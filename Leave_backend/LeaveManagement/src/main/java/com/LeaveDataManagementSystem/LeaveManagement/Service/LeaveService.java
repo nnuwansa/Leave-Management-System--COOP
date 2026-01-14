@@ -37,6 +37,9 @@ public class LeaveService {
     @Autowired
     private LeaveEntitlementService leaveEntitlementService;
 
+    @Autowired
+    private WorkingDayCalculator workingDayCalculator;
+
 
     // Helper method to send initial notification
     private void sendInitialNotification(Leave leave, LeaveRequest leaveRequest) {
@@ -62,7 +65,7 @@ public class LeaveService {
     }
 
 
-        // Helper method to determine next status after acting officer approval
+    // Helper method to determine next status after acting officer approval
     private LeaveStatus getNextStatusAfterActingApproval(Leave leave) {
         if (leave.getSupervisingOfficerEmail() != null &&
                 !leave.getSupervisingOfficerEmail().trim().isEmpty()) {
@@ -136,7 +139,7 @@ public class LeaveService {
                     leaveEntitlementService.updateEntitlementOnLeaveApproval(
                             leave.getEmployeeEmail(), leave.getLeaveType(),
                             leave.getStartDate(), leave.getEndDate(),
-                            leave.isShortLeave(), leave.isHalfDay());
+                            leave.isShortLeave(), leave.isHalfDay(),leave.getWorkingDays());
                 }
                 notificationService.notifyEmployee(leave, "APPROVED", "Acting Officer");
                 return "Leave approved successfully";
@@ -217,7 +220,7 @@ public class LeaveService {
                     leaveEntitlementService.updateEntitlementOnLeaveApproval(
                             leave.getEmployeeEmail(), leave.getLeaveType(),
                             leave.getStartDate(), leave.getEndDate(),
-                            leave.isShortLeave(), leave.isHalfDay());
+                            leave.isShortLeave(), leave.isHalfDay(),leave.getWorkingDays());
                 }
                 notificationService.notifyEmployee(leave, "APPROVED", "Supervising Officer");
                 return "Leave approved successfully";
@@ -304,8 +307,9 @@ public class LeaveService {
                         leave.getStartDate(),
                         leave.getEndDate(),
                         leave.isShortLeave(),
-                        leave.isHalfDay()
-                );
+                        leave.isHalfDay(),
+                        leave.getWorkingDays());
+
             }
 
             notificationService.notifyEmployee(leave, "APPROVED", "Approval Officer");
@@ -429,7 +433,8 @@ public class LeaveService {
                         leave.getStartDate(),
                         leave.getEndDate(),
                         leave.isShortLeave(),
-                        leave.isHalfDay()
+                        leave.isHalfDay(),
+                        leave.getWorkingDays()
                 );
                 logger.info("Entitlements reverted successfully for leave: {}", leaveId);
             } else {
@@ -635,10 +640,9 @@ public class LeaveService {
     }
 
 
-    /// //////////////
-    // Add these methods to your existing LeaveService.java
 
-// Helper method to create Leave from LeaveRequest (UPDATED)
+
+// Helper method to create Leave from LeaveRequest
     private Leave createLeaveFromRequest(User employee, LeaveRequest leaveRequest,
                                          User actingOfficer, User supervisingOfficer, User approvalOfficer) {
         Leave leave;
@@ -698,7 +702,7 @@ public class LeaveService {
         return leave;
     }
 
-    // Updated validation for maternity leave
+
     public String submitLeaveRequest(String employeeEmail, LeaveRequest leaveRequest) {
         User employee = userRepository.findByEmail(employeeEmail);
         if (employee == null) return "Employee not found";
@@ -762,23 +766,52 @@ public class LeaveService {
                 return "Supervising officer and approval officer must be different";
         }
 
-        // ENTITLEMENT VALIDATION
+        // CALCULATE WORKING DAYS AND VALIDATE ENTITLEMENTS
         String entitlementValidation;
+        Map<String, Integer> workingDaysBreakdown = null;
+        int actualWorkingDays = 0;
+
         if ("SHORT".equals(leaveRequest.getLeaveType())) {
+            actualWorkingDays = 0;
             entitlementValidation = leaveEntitlementService.validateShortLeaveRequest(
                     employeeEmail, leaveRequest.getStartDate());
         } else if ("HALF_DAY".equals(leaveRequest.getLeaveType())) {
+            // Check if half-day is on a working day
+            if (!workingDayCalculator.isWorkingDay(leaveRequest.getStartDate())) {
+                return "Half-day leave cannot be taken on weekends or public holidays";
+            }
+            actualWorkingDays = 0; // Half day = 0.5, but stored separately
             entitlementValidation = leaveEntitlementService.validateLeaveRequest(
                     employeeEmail, "HALF_DAY",
                     leaveRequest.getStartDate(), leaveRequest.getEndDate(),
                     true, leaveRequest.getHalfDayPeriod());
         } else if ("MATERNITY".equals(leaveRequest.getLeaveType())) {
-            // NEW: Special validation for maternity leave
+            // Maternity leave special validation
             entitlementValidation = validateMaternityLeaveRequest(employeeEmail, leaveRequest);
         } else {
-            entitlementValidation = leaveEntitlementService.validateLeaveRequest(
-                    employeeEmail, leaveRequest.getLeaveType(),
+            // Calculate working days for regular leave (CASUAL, SICK, DUTY)
+            logger.info("Calculating working days for {} from {} to {}",
+                    employeeEmail, leaveRequest.getStartDate(), leaveRequest.getEndDate());
+
+            workingDaysBreakdown = workingDayCalculator.calculateWorkingDays(
                     leaveRequest.getStartDate(), leaveRequest.getEndDate());
+
+            actualWorkingDays = workingDaysBreakdown.get("workingDays");
+
+            logger.info("Working days calculation result: Total={}, Working={}, Weekends={}, Holidays={}",
+                    workingDaysBreakdown.get("totalDays"),
+                    actualWorkingDays,
+                    workingDaysBreakdown.get("weekendDays"),
+                    workingDaysBreakdown.get("publicHolidays"));
+
+            if (actualWorkingDays == 0) {
+                return "Selected leave period contains only weekends and public holidays. No working days to deduct.";
+            }
+
+            // Validate with working days instead of calendar days
+            entitlementValidation = leaveEntitlementService.validateLeaveRequestWithWorkingDays(
+                    employeeEmail, leaveRequest.getLeaveType(),
+                    leaveRequest.getStartDate(), leaveRequest.getEndDate(), actualWorkingDays);
         }
 
         if (!"VALID".equals(entitlementValidation)) {
@@ -791,12 +824,36 @@ public class LeaveService {
                     employeeEmail, leaveRequest.getStartDate(), leaveRequest.getEndDate()
             ).stream().filter(l -> l.getStatus() != LeaveStatus.REJECTED_BY_ACTING_OFFICER &&
                     l.getStatus() != LeaveStatus.REJECTED_BY_SUPERVISING_OFFICER &&
-                    l.getStatus() != LeaveStatus.REJECTED_BY_APPROVAL_OFFICER).toList();
+                    l.getStatus() != LeaveStatus.REJECTED_BY_APPROVAL_OFFICER &&
+                    !l.isCancelled()).toList();
             if (!overlapping.isEmpty()) return "You already have overlapping leave requests";
         }
 
         // Create Leave object based on leave type
         Leave leave = createLeaveFromRequest(employee, leaveRequest, actingOfficer, supervisingOfficer, approvalOfficer);
+
+        // ✅ SAVE WORKING DAYS BREAKDOWN IN LEAVE OBJECT
+        if (workingDaysBreakdown != null) {
+            leave.setWorkingDays(workingDaysBreakdown.get("workingDays"));
+            leave.setTotalDays(workingDaysBreakdown.get("totalDays"));
+            leave.setWeekendDays(workingDaysBreakdown.get("weekendDays"));
+            leave.setPublicHolidays(workingDaysBreakdown.get("publicHolidays"));
+
+            logger.info("Saved working days breakdown for leave: workingDays={}, totalDays={}, weekends={}, holidays={}",
+                    leave.getWorkingDays(), leave.getTotalDays(), leave.getWeekendDays(), leave.getPublicHolidays());
+        } else if ("HALF_DAY".equals(leaveRequest.getLeaveType())) {
+            // For half day, set working days to 0 (0.5 is handled separately)
+            leave.setWorkingDays(0);
+            leave.setTotalDays(1);
+            leave.setWeekendDays(0);
+            leave.setPublicHolidays(0);
+        } else if ("SHORT".equals(leaveRequest.getLeaveType())) {
+            // For short leave
+            leave.setWorkingDays(0);
+            leave.setTotalDays(0);
+            leave.setWeekendDays(0);
+            leave.setPublicHolidays(0);
+        }
 
         // Set initial workflow status
         leave.setStatus(leaveRequest.getInitialWorkflowStatus());
@@ -821,82 +878,86 @@ public class LeaveService {
         // Send notification to the appropriate first officer in workflow
         sendInitialNotification(leave, leaveRequest);
 
+        // Log the working days calculation for audit
+        if (actualWorkingDays > 0) {
+            logger.info("Leave submitted for {}: {} working days (from {} to {}), Total calendar days: {}",
+                    employeeEmail, actualWorkingDays, leaveRequest.getStartDate(),
+                    leaveRequest.getEndDate(), leave.getTotalDays());
+        }
+
         return "Leave request submitted successfully";
     }
 
-
-
 // Replace your existing validateMaternityLeaveRequest method in LeaveService with this updated version:
 
-public String validateMaternityLeaveRequest(String employeeEmail, LeaveRequest leaveRequest) {
-    // Basic validations for maternity leave
-    if (leaveRequest.getMaternityLeaveType() == null || leaveRequest.getMaternityLeaveType().trim().isEmpty()) {
-        return "Maternity leave type is required";
-    }
+    public String validateMaternityLeaveRequest(String employeeEmail, LeaveRequest leaveRequest) {
+        // Basic validations for maternity leave
+        if (leaveRequest.getMaternityLeaveType() == null || leaveRequest.getMaternityLeaveType().trim().isEmpty()) {
+            return "Maternity leave type is required";
+        }
 
-    // Validate maternity leave type
-    if (!Arrays.asList("FULL_PAY", "HALF_PAY", "NO_PAY").contains(leaveRequest.getMaternityLeaveType())) {
-        return "Invalid maternity leave type. Must be FULL_PAY, HALF_PAY, or NO_PAY";
-    }
+        // Validate maternity leave type
+        if (!Arrays.asList("FULL_PAY", "HALF_PAY", "NO_PAY").contains(leaveRequest.getMaternityLeaveType())) {
+            return "Invalid maternity leave type. Must be FULL_PAY, HALF_PAY, or NO_PAY";
+        }
 
-    // UPDATED: More flexible validation for existing maternity leaves
-    List<Leave> existingMaternityLeaves = leaveRepository.findByEmployeeEmailOrderByCreatedAtDesc(employeeEmail)
-            .stream()
-            .filter(leave -> "MATERNITY".equals(leave.getLeaveType()) &&
-                    !leave.isCancelled() &&
-                    leave.getStatus() != LeaveStatus.REJECTED_BY_ACTING_OFFICER &&
-                    leave.getStatus() != LeaveStatus.REJECTED_BY_SUPERVISING_OFFICER &&
-                    leave.getStatus() != LeaveStatus.REJECTED_BY_APPROVAL_OFFICER)
-            .collect(Collectors.toList());
+        // UPDATED: More flexible validation for existing maternity leaves
+        List<Leave> existingMaternityLeaves = leaveRepository.findByEmployeeEmailOrderByCreatedAtDesc(employeeEmail)
+                .stream()
+                .filter(leave -> "MATERNITY".equals(leave.getLeaveType()) &&
+                        !leave.isCancelled() &&
+                        leave.getStatus() != LeaveStatus.REJECTED_BY_ACTING_OFFICER &&
+                        leave.getStatus() != LeaveStatus.REJECTED_BY_SUPERVISING_OFFICER &&
+                        leave.getStatus() != LeaveStatus.REJECTED_BY_APPROVAL_OFFICER)
+                .collect(Collectors.toList());
 
-    if (!existingMaternityLeaves.isEmpty()) {
-        // Check for overlapping or conflicting maternity leaves
-        LocalDate newLeaveStartDate = leaveRequest.getStartDate();
+        if (!existingMaternityLeaves.isEmpty()) {
+            // Check for overlapping or conflicting maternity leaves
+            LocalDate newLeaveStartDate = leaveRequest.getStartDate();
 
-        for (Leave existingLeave : existingMaternityLeaves) {
-            // Case 1: Check for pending maternity leaves (not yet approved)
-            if (existingLeave.getStatus() == LeaveStatus.PENDING_ACTING_OFFICER ||
-                    existingLeave.getStatus() == LeaveStatus.PENDING_SUPERVISING_OFFICER ||
-                    existingLeave.getStatus() == LeaveStatus.PENDING_APPROVAL_OFFICER) {
-                return "You already have a pending maternity leave request. Please wait for it to be processed or cancel it first.";
-            }
+            for (Leave existingLeave : existingMaternityLeaves) {
+                // Case 1: Check for pending maternity leaves (not yet approved)
+                if (existingLeave.getStatus() == LeaveStatus.PENDING_ACTING_OFFICER ||
+                        existingLeave.getStatus() == LeaveStatus.PENDING_SUPERVISING_OFFICER ||
+                        existingLeave.getStatus() == LeaveStatus.PENDING_APPROVAL_OFFICER) {
+                    return "You already have a pending maternity leave request. Please wait for it to be processed or cancel it first.";
+                }
 
-            // Case 2: Check for approved maternity leaves
-            if (existingLeave.getStatus() == LeaveStatus.APPROVED) {
-                // If the existing leave has an end date set, check for date conflicts
-                if (existingLeave.getEndDate() != null) {
-                    // New leave should start after the existing leave ends
-                    if (newLeaveStartDate.isBefore(existingLeave.getEndDate().plusDays(1))) {
-                        return String.format(
-                                "You have an existing maternity leave from %s to %s (%s). " +
-                                        "New maternity leave must start after %s.",
-                                existingLeave.getStartDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                                existingLeave.getEndDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
-                                formatMaternityLeaveType(existingLeave.getMaternityLeaveType()),
-                                existingLeave.getEndDate().plusDays(1).format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
-                        );
-                    }
-                    // Allow the new request if it starts after the existing leave ends
-                } else {
-                    // Existing leave is approved but end date not set yet - allow continuation requests
-                    // Check if this is a continuation/extension request
-                    if (isContinuationRequest(existingLeave, leaveRequest)) {
-                        // Allow continuation but with a warning message
-                        logger.info("Allowing maternity leave continuation request for employee: {}", employeeEmail);
+                // Case 2: Check for approved maternity leaves
+                if (existingLeave.getStatus() == LeaveStatus.APPROVED) {
+                    // If the existing leave has an end date set, check for date conflicts
+                    if (existingLeave.getEndDate() != null) {
+                        // New leave should start after the existing leave ends
+                        if (newLeaveStartDate.isBefore(existingLeave.getEndDate().plusDays(1))) {
+                            return String.format(
+                                    "You have an existing maternity leave from %s to %s (%s). " +
+                                            "New maternity leave must start after %s.",
+                                    existingLeave.getStartDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                                    existingLeave.getEndDate().format(DateTimeFormatter.ofPattern("MMM dd, yyyy")),
+                                    formatMaternityLeaveType(existingLeave.getMaternityLeaveType()),
+                                    existingLeave.getEndDate().plusDays(1).format(DateTimeFormatter.ofPattern("MMM dd, yyyy"))
+                            );
+                        }
+                        // Allow the new request if it starts after the existing leave ends
                     } else {
-                        return "You have an existing approved maternity leave without an end date set. " +
-                                "Please contact admin to set the end date first, or ensure your new request is a valid continuation.";
+                        // Existing leave is approved but end date not set yet - allow continuation requests
+                        // Check if this is a continuation/extension request
+                        if (isContinuationRequest(existingLeave, leaveRequest)) {
+                            // Allow continuation but with a warning message
+                            logger.info("Allowing maternity leave continuation request for employee: {}", employeeEmail);
+                        } else {
+                            return "You have an existing approved maternity leave without an end date set. " +
+                                    "Please contact admin to set the end date first, or ensure your new request is a valid continuation.";
+                        }
                     }
                 }
             }
         }
+
+
+
+        return "VALID";
     }
-
-    // Additional business logic validations can be added here
-    // For example: check if employee is eligible for maternity leave based on tenure, etc.
-
-    return "VALID";
-}
 
     // Helper method to determine if this is a valid continuation request
     private boolean isContinuationRequest(Leave existingLeave, LeaveRequest newRequest) {
@@ -941,92 +1002,109 @@ public String validateMaternityLeaveRequest(String employeeEmail, LeaveRequest l
         }
     }
 
-// Replace your existing setMaternityLeaveEndDate method with this updated version
-public String setMaternityLeaveEndDate(String leaveId, String adminEmail, LocalDate endDate, String adminComments) {
-    try {
-        Leave leave = leaveRepository.findById(leaveId)
-                .orElseThrow(() -> new RuntimeException("Leave request not found"));
 
-        // Validate it's a maternity leave
-        if (!leave.isMaternityLeave()) {
-            return "This is not a maternity leave request";
-        }
 
-        // Validate the leave is approved
-        if (leave.getStatus() != LeaveStatus.APPROVED) {
-            return "Maternity leave must be approved before setting end date";
-        }
 
-        // Validate end date is not set already
-        if (leave.isMaternityEndDateSet()) {
-            return "End date has already been set for this maternity leave";
-        }
 
-        // Validate end date is after start date
-        if (endDate.isBefore(leave.getStartDate()) || endDate.isEqual(leave.getStartDate())) {
-            return "End date must be after the start date";
-        }
 
-        // Set the end date and mark as set
-        LocalDateTime originalCreatedAt = leave.getCreatedAt();
-        LocalDateTime originalActingApprovedAt = leave.getActingOfficerApprovedAt();
-        LocalDateTime originalSupervisingApprovedAt = leave.getSupervisingOfficerApprovedAt();
-        LocalDateTime originalApprovalApprovedAt = leave.getApprovalOfficerApprovedAt();
-
-        leave.setEndDate(endDate);
-        leave.setMaternityEndDateSet(true);
-
-        // Enhanced additional details with admin comments
-        StringBuilder additionalDetails = new StringBuilder();
-        additionalDetails.append("End date set by admin: ").append(adminEmail);
-        additionalDetails.append(" on ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' hh:mm a")));
-        if (adminComments != null && !adminComments.trim().isEmpty()) {
-            additionalDetails.append(" - Comments: ").append(adminComments);
-        }
-        leave.setMaternityAdditionalDetails(additionalDetails.toString());
-
-        // Preserve original timestamps
-        if (originalCreatedAt != null) {
-            leave.setCreatedAt(originalCreatedAt);
-        }
-        if (originalActingApprovedAt != null) {
-            leave.setActingOfficerApprovedAt(originalActingApprovedAt);
-        }
-        if (originalSupervisingApprovedAt != null) {
-            leave.setSupervisingOfficerApprovedAt(originalSupervisingApprovedAt);
-        }
-        if (originalApprovalApprovedAt != null) {
-            leave.setApprovalOfficerApprovedAt(originalApprovalApprovedAt);
-        }
-
-        leaveRepository.save(leave);
-
-        // Now update entitlements with the actual leave duration
-        leaveEntitlementService.updateEntitlementOnLeaveApproval(
-                leave.getEmployeeEmail(),
-                leave.getLeaveType(),
-                leave.getStartDate(),
-                leave.getEndDate(),
-                false, // not short leave
-                false  // not half day
-        );
-
-        // FIXED: Send notification to employee about end date being set
+    public String setMaternityLeaveEndDate(String leaveId, String adminEmail, LocalDate endDate, String adminComments) {
         try {
-            notificationService.notifyMaternityLeaveEndDateSet(leave, adminEmail);
-            logger.info("Maternity leave end date notification sent to employee: {}", leave.getEmployeeEmail());
+            Leave leave = leaveRepository.findById(leaveId)
+                    .orElseThrow(() -> new RuntimeException("Leave request not found"));
+
+            // Validate it's a maternity leave
+            if (!leave.isMaternityLeave()) {
+                return "This is not a maternity leave request";
+            }
+
+            // Validate the leave is approved
+            if (leave.getStatus() != LeaveStatus.APPROVED) {
+                return "Maternity leave must be approved before setting end date";
+            }
+
+            // Validate end date is not set already
+            if (leave.isMaternityEndDateSet()) {
+                return "End date has already been set for this maternity leave";
+            }
+
+            // Validate end date is after start date
+            if (endDate.isBefore(leave.getStartDate()) || endDate.isEqual(leave.getStartDate())) {
+                return "End date must be after the start date";
+            }
+
+            // Set the end date and mark as set
+            LocalDateTime originalCreatedAt = leave.getCreatedAt();
+            LocalDateTime originalActingApprovedAt = leave.getActingOfficerApprovedAt();
+            LocalDateTime originalSupervisingApprovedAt = leave.getSupervisingOfficerApprovedAt();
+            LocalDateTime originalApprovalApprovedAt = leave.getApprovalOfficerApprovedAt();
+
+            leave.setEndDate(endDate);
+            leave.setMaternityEndDateSet(true);
+
+            // Calculate working days for maternity leave
+            Map<String, Integer> workingDaysBreakdown = workingDayCalculator.calculateWorkingDays(
+                    leave.getStartDate(), endDate);
+            int actualWorkingDays = workingDaysBreakdown.get("workingDays");
+
+            // Update the leave object with working days breakdown
+            leave.setWorkingDays(actualWorkingDays);
+            leave.setTotalDays(workingDaysBreakdown.get("totalDays"));
+            leave.setWeekendDays(workingDaysBreakdown.get("weekendDays"));
+            leave.setPublicHolidays(workingDaysBreakdown.get("publicHolidays"));
+
+            // Enhanced additional details with admin comments
+            StringBuilder additionalDetails = new StringBuilder();
+            additionalDetails.append("End date set by admin: ").append(adminEmail);
+            additionalDetails.append(" on ").append(LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' hh:mm a")));
+            if (adminComments != null && !adminComments.trim().isEmpty()) {
+                additionalDetails.append(" - Comments: ").append(adminComments);
+            }
+            leave.setMaternityAdditionalDetails(additionalDetails.toString());
+
+            // Preserve original timestamps
+            if (originalCreatedAt != null) {
+                leave.setCreatedAt(originalCreatedAt);
+            }
+            if (originalActingApprovedAt != null) {
+                leave.setActingOfficerApprovedAt(originalActingApprovedAt);
+            }
+            if (originalSupervisingApprovedAt != null) {
+                leave.setSupervisingOfficerApprovedAt(originalSupervisingApprovedAt);
+            }
+            if (originalApprovalApprovedAt != null) {
+                leave.setApprovalOfficerApprovedAt(originalApprovalApprovedAt);
+            }
+
+            leaveRepository.save(leave);
+
+            // Now update entitlements with the actual leave duration and working days
+            leaveEntitlementService.updateEntitlementOnLeaveApproval(
+                    leave.getEmployeeEmail(),
+                    leave.getLeaveType(),
+                    leave.getStartDate(),
+                    leave.getEndDate(),
+                    false, // not short leave
+                    false, // not half day
+                    actualWorkingDays // calculated working days
+            );
+
+            // Send notification to employee about end date being set
+            try {
+                notificationService.notifyMaternityLeaveEndDateSet(leave, adminEmail);
+                logger.info("Maternity leave end date notification sent to employee: {}", leave.getEmployeeEmail());
+            } catch (Exception e) {
+                logger.warn("Failed to send maternity leave end date notification: {}", e.getMessage(), e);
+            }
+
+            long totalDays = ChronoUnit.DAYS.between(leave.getStartDate(), leave.getEndDate()) + 1;
+            return String.format("Maternity leave end date set successfully. Duration: %d calendar days (%d working days). Employee has been notified via email.",
+                    totalDays, actualWorkingDays);
+
         } catch (Exception e) {
-            logger.warn("Failed to send maternity leave end date notification: {}", e.getMessage(), e);
+            logger.error("Error setting maternity leave end date: {}", e.getMessage(), e);
+            return "Failed to set maternity leave end date: " + e.getMessage();
         }
-
-        long totalDays = ChronoUnit.DAYS.between(leave.getStartDate(), leave.getEndDate()) + 1;
-        return "Maternity leave end date set successfully. Duration: " + totalDays + " days. Employee has been notified via email.";
-
-    } catch (Exception e) {
-        logger.error("Error setting maternity leave end date: {}", e.getMessage(), e);
-        return "Failed to set maternity leave end date: " + e.getMessage();
     }
-}
 
     // NEW: Get maternity leaves needing end date (for admin dashboard)
     public List<Leave> getMaternityLeavesNeedingEndDate() {

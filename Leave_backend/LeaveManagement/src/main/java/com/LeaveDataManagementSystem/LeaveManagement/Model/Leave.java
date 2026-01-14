@@ -1,6 +1,5 @@
 package com.LeaveDataManagementSystem.LeaveManagement.Model;
 
-
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -10,7 +9,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-
 
 @Document(collection = "leaves")
 public class Leave {
@@ -24,6 +22,12 @@ public class Leave {
     private LocalDate endDate;
     private String reason;
 
+    // NEW FIELD: Store actual working days for the leave
+    private int workingDays = 0;  // Number of working days (excluding weekends & holidays)
+    private int totalDays = 0;    // Total calendar days
+    private int weekendDays = 0;  // Number of weekends
+    private int publicHolidays = 0; // Number of public holidays
+
     // NEW FIELDS FOR SHORT LEAVE AND HALF DAY
     private boolean isShortLeave = false;
     private boolean isHalfDay = false;
@@ -34,12 +38,11 @@ public class Leave {
     // NEW: Maternity leave specific fields
     private boolean isMaternityLeave = false;
     private String maternityLeaveType; // "FULL_PAY", "HALF_PAY", "NO_PAY"
-    private boolean isMaternityEndDateSet = false; // Flag to track if end date is set by admin
-    private String maternityAdditionalDetails; // Additional details about maternity leave
+    private boolean isMaternityEndDateSet = false;
+    private String maternityAdditionalDetails;
 
     private String actingOfficerEmail;
     private String actingOfficerName;
-
     private String supervisingOfficerEmail;
     private String supervisingOfficerName;
     private String approvalOfficerEmail;
@@ -104,7 +107,7 @@ public class Leave {
         this.employeeName = employeeName;
         this.leaveType = leaveType;
         this.startDate = date;
-        this.endDate = date; // Same day for half day
+        this.endDate = date;
         this.isHalfDay = true;
         this.halfDayPeriod = halfDayPeriod;
         this.reason = reason;
@@ -127,7 +130,7 @@ public class Leave {
         this.employeeName = employeeName;
         this.leaveType = "SHORT_LEAVE";
         this.startDate = date;
-        this.endDate = date; // Same day for short leave
+        this.endDate = date;
         this.isShortLeave = true;
         this.shortLeaveStartTime = startTime;
         this.shortLeaveEndTime = endTime;
@@ -141,7 +144,7 @@ public class Leave {
         this.createdAt = LocalDateTime.now();
     }
 
-    // NEW: Maternity leave constructor
+    // Maternity leave constructor
     public Leave(String employeeEmail, String employeeName, LocalDate startDate,
                  String maternityLeaveType, String reason,
                  String actingOfficerEmail, String actingOfficerName,
@@ -151,7 +154,7 @@ public class Leave {
         this.employeeName = employeeName;
         this.leaveType = "MATERNITY";
         this.startDate = startDate;
-        this.endDate = null; // Will be set by admin after approval
+        this.endDate = null;
         this.isMaternityLeave = true;
         this.maternityLeaveType = maternityLeaveType;
         this.isMaternityEndDateSet = false;
@@ -168,22 +171,57 @@ public class Leave {
     // Method to calculate effective days for entitlement deduction
     public double getEffectiveDays() {
         if (isShortLeave) {
-            return 0; // Short leaves don't reduce entitlements
-        } else if (isHalfDay) {
-            return 0.5; // Half day is 0.5 days
-        } else if (isMaternityLeave && !isMaternityEndDateSet) {
-            return 0; // Don't calculate days until end date is set by admin
-        } else if (startDate != null && endDate != null) {
-            return ChronoUnit.DAYS.between(startDate, endDate) + 1;
-        } else {
             return 0;
+        } else if (isHalfDay) {
+            return 0.5;
+        } else if (isMaternityLeave && !isMaternityEndDateSet) {
+            return 0;
+        } else {
+            // Return working days instead of total days
+            return workingDays > 0 ? workingDays :
+                    (startDate != null && endDate != null ? ChronoUnit.DAYS.between(startDate, endDate) + 1 : 0);
         }
     }
+
+    // NEW: Get display-friendly duration string
+    public String getDurationDisplay() {
+        if (isShortLeave) {
+            return "Short Leave";
+        } else if (isHalfDay) {
+            return "0.5 day (Half Day)";
+        } else if (workingDays > 0) {
+            return workingDays + " working day" + (workingDays != 1 ? "s" : "") +
+                    " (" + totalDays + " total)";
+        } else if (startDate != null && endDate != null) {
+            long days = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+            return days + " day" + (days != 1 ? "s" : "");
+        }
+        return "N/A";
+    }
+
+    // NEW: Getters and Setters for working days fields
+    public int getWorkingDays() { return workingDays; }
+    public void setWorkingDays(int workingDays) { this.workingDays = workingDays; }
+
+    public int getTotalDays() {
+        if (totalDays > 0) {
+            return totalDays;
+        } else if (startDate != null && endDate != null) {
+            return (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        }
+        return 0;
+    }
+    public void setTotalDays(int totalDays) { this.totalDays = totalDays; }
+
+    public int getWeekendDays() { return weekendDays; }
+    public void setWeekendDays(int weekendDays) { this.weekendDays = weekendDays; }
+
+    public int getPublicHolidays() { return publicHolidays; }
+    public void setPublicHolidays(int publicHolidays) { this.publicHolidays = publicHolidays; }
 
     // Method to get maternity leave duration description
     public String getMaternityLeaveDuration() {
         if (!isMaternityLeave) return null;
-
         switch (maternityLeaveType) {
             case "FULL_PAY": return "Full Pay - 84 Days";
             case "HALF_PAY": return "Half Pay - 84 Days";
@@ -192,14 +230,12 @@ public class Leave {
         }
     }
 
-    // CUSTOM SETTER FOR CREATED_AT TO PREVENT OVERWRITING
     public void setCreatedAt(LocalDateTime createdAt) {
         if (this.createdAt == null || createdAt != null) {
             this.createdAt = createdAt;
         }
     }
 
-    // GETTER THAT ENSURES CREATED_AT IS NEVER NULL
     public LocalDateTime getCreatedAt() {
         if (this.createdAt == null) {
             this.createdAt = LocalDateTime.now();
@@ -207,7 +243,6 @@ public class Leave {
         return this.createdAt;
     }
 
-    // Method to check if leave can be cancelled
     public boolean canBeCancelled() {
         if (isCancelled ||
                 status == LeaveStatus.REJECTED_BY_ACTING_OFFICER ||
@@ -215,7 +250,6 @@ public class Leave {
                 status == LeaveStatus.REJECTED_BY_APPROVAL_OFFICER) {
             return false;
         }
-
         LocalDate today = LocalDate.now();
         return startDate.isAfter(today);
     }
@@ -257,7 +291,6 @@ public class Leave {
     public LocalTime getShortLeaveEndTime() { return shortLeaveEndTime; }
     public void setShortLeaveEndTime(LocalTime shortLeaveEndTime) { this.shortLeaveEndTime = shortLeaveEndTime; }
 
-    // NEW: Maternity leave getters/setters
     public boolean isMaternityLeave() { return isMaternityLeave; }
     public void setMaternityLeave(boolean maternityLeave) { isMaternityLeave = maternityLeave; }
 
@@ -270,7 +303,6 @@ public class Leave {
     public String getMaternityAdditionalDetails() { return maternityAdditionalDetails; }
     public void setMaternityAdditionalDetails(String maternityAdditionalDetails) { this.maternityAdditionalDetails = maternityAdditionalDetails; }
 
-    // Other existing getters/setters...
     public String getActingOfficerEmail() { return actingOfficerEmail; }
     public void setActingOfficerEmail(String actingOfficerEmail) { this.actingOfficerEmail = actingOfficerEmail; }
 
@@ -334,13 +366,15 @@ public class Leave {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
-    public double getTotalDays() {
+    public double getEffectiveWorkingDays() {
         if (isShortLeave) {
             return 0;
         } else if (isHalfDay) {
             return 0.5;
         } else if (isMaternityLeave && !isMaternityEndDateSet) {
-            return 0; // Don't calculate until end date is set
+            return 0;
+        } else if (workingDays > 0) {
+            return workingDays;
         } else if (startDate != null && endDate != null) {
             return ChronoUnit.DAYS.between(startDate, endDate) + 1;
         } else {

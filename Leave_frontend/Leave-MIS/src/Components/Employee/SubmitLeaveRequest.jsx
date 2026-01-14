@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Send, Calendar, AlertCircle, Info, Menu } from "lucide-react";
+import { Send, Calendar, AlertCircle, Info } from "lucide-react";
 import Navbar from "../Navbar/Navbar";
 import EmployeeSidebar from "../Navbar/EmployeeSidebar";
 import "../CSS/EmployeeDashboard.css";
@@ -49,13 +49,6 @@ const maternityPaymentOptions = [
   { value: "NO_PAY", label: "No Pay - 84 Days" },
 ];
 
-// Helper: calculate days between two dates
-const calculateDaysUtil = (start, end) => {
-  if (!start || !end) return 0;
-  const diffTime = new Date(end) - new Date(start);
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-};
-
 const SubmitLeaveRequest = ({
   showMessage: propShowMessage,
   refreshData = () => {},
@@ -75,8 +68,7 @@ const SubmitLeaveRequest = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [leaveEntitlements, setLeaveEntitlements] = useState([]);
-  const [shortLeaveEntitlements, setShortLeaveEntitlements] = useState([]);
+  const [workingDaysInfo, setWorkingDaysInfo] = useState(null);
 
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "",
@@ -129,7 +121,7 @@ const SubmitLeaveRequest = ({
   // Fetch current user
   const fetchCurrentUser = async () => {
     try {
-      const user = await API.get(`/admin/users/${email}`);
+      const user = await API.get(`/employee/me`);
       setCurrentUser(user);
       if (user.department) {
         fetchDepartmentOfficers(user.department, user.email);
@@ -140,160 +132,87 @@ const SubmitLeaveRequest = ({
     }
   };
 
-  // Fetch leave entitlements
-  const fetchLeaveEntitlements = async () => {
-    try {
-      console.log("Fetching leave entitlements...");
-      const entitlements = await API.get("/entitlements/my-entitlements");
-      console.log("Raw entitlements received:", entitlements);
-
-      if (Array.isArray(entitlements)) {
-        const processedEntitlements = entitlements.map((entitlement) => {
-          const halfDays = entitlement.accumulatedHalfDays || 0;
-          const effectiveUsedDays = entitlement.usedDays + halfDays * 0.5;
-          const effectiveRemainingDays =
-            entitlement.totalEntitlement - effectiveUsedDays;
-
-          return {
-            ...entitlement,
-            effectiveUsedDays: effectiveUsedDays,
-            effectiveRemainingDays: effectiveRemainingDays,
-            hasHalfDays: halfDays > 0,
-          };
-        });
-
-        setLeaveEntitlements(processedEntitlements);
-      } else {
-        console.warn("Entitlements response is not an array:", entitlements);
-        setLeaveEntitlements([]);
-      }
-    } catch (err) {
-      console.error("Error fetching entitlements:", err);
-      showMessage("Failed to fetch leave entitlements", true);
-      setLeaveEntitlements([]);
-    }
-  };
-
-  // Fetch short leave entitlements
-  const fetchShortLeaveEntitlements = async () => {
-    try {
-      if (!token) {
-        console.log("No token available for short leave entitlements");
-        return;
-      }
-
-      const response = await API.get("/leaves/my-short-leave-entitlements");
-      const data = Array.isArray(response.data) ? response.data : [];
-
-      console.log("Short leave entitlements fetched:", data);
-
-      // Only include current month's short leave
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
-
-      const currentMonthData = data.filter(
-        (item) => item.month === currentMonth && item.year === currentYear
-      );
-
-      setShortLeaveEntitlements(currentMonthData);
-    } catch (error) {
-      console.error("Error fetching short leave entitlements:", error);
-      setShortLeaveEntitlements([]);
-    }
-  };
-
-  // Fetch department officers - includes supervising officers
+  // Fetch department officers
   const fetchDepartmentOfficers = async (department, currentUserEmail) => {
     try {
       console.log("Fetching officers for department:", department);
 
-      if (department === "All") {
-        try {
-          const allDeptOfficers = await API.get(
-            `/employee/officers/department/All/exclude/${encodeURIComponent(
-              currentUserEmail
-            )}`
-          );
+      const response = await API.get(
+        `/employee/officers/department/${encodeURIComponent(
+          department
+        )}/exclude/${encodeURIComponent(currentUserEmail)}`
+      );
 
-          console.log("All department officers response:", allDeptOfficers);
+      console.log("Officers response:", response);
 
-          const sortedOfficers = Array.isArray(allDeptOfficers.acting)
-            ? allDeptOfficers.acting.sort((a, b) =>
-                a.name.localeCompare(b.name)
-              )
-            : [];
+      // Set acting and supervising officers (same department)
+      const actingList = Array.isArray(response.acting)
+        ? response.acting.sort((a, b) => a.name.localeCompare(b.name))
+        : [];
 
-          setActingOfficers(sortedOfficers);
-          setSupervisingOfficers(sortedOfficers);
+      setActingOfficers(actingList);
+      setSupervisingOfficers(actingList);
 
-          setApprovalOfficers(
-            Array.isArray(allDeptOfficers.approval)
-              ? allDeptOfficers.approval
-                  .filter(
-                    (officer, index, self) =>
-                      index === self.findIndex((o) => o.email === officer.email)
-                  )
-                  .sort((a, b) => a.name.localeCompare(b.name))
-              : []
-          );
-        } catch (err) {
-          console.warn("Error fetching 'All' department officers:", err);
-          setActingOfficers([]);
-          setSupervisingOfficers([]);
-          setApprovalOfficers([]);
-        }
-      } else {
-        try {
-          const deptOfficers = await API.get(
-            `/employee/officers/department/${encodeURIComponent(
-              department
-            )}/exclude/${encodeURIComponent(currentUserEmail)}`
-          );
+      // Set approval officers (same department + ALL department)
+      const approvalList = Array.isArray(response.approval)
+        ? response.approval
+            .filter(
+              (officer, index, self) =>
+                index === self.findIndex((o) => o.email === officer.email)
+            )
+            .sort((a, b) => a.name.localeCompare(b.name))
+        : [];
 
-          console.log("Department officers response:", deptOfficers);
+      setApprovalOfficers(approvalList);
 
-          const sortedDeptOfficers = Array.isArray(deptOfficers.acting)
-            ? deptOfficers.acting.sort((a, b) => a.name.localeCompare(b.name))
-            : [];
-
-          setActingOfficers(sortedDeptOfficers);
-          setSupervisingOfficers(sortedDeptOfficers);
-
-          try {
-            const allDeptOfficers = await API.get(
-              `/employee/officers/department/All/exclude/${encodeURIComponent(
-                currentUserEmail
-              )}`
-            );
-
-            setApprovalOfficers(
-              Array.isArray(allDeptOfficers.approval)
-                ? allDeptOfficers.approval
-                    .filter(
-                      (officer, index, self) =>
-                        index ===
-                        self.findIndex((o) => o.email === officer.email)
-                    )
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                : []
-            );
-          } catch (err) {
-            console.warn("Could not fetch 'All' department officers:", err);
-            setApprovalOfficers([]);
-          }
-        } catch (err) {
-          console.error("Error fetching department officers:", err);
-          showMessage("Failed to fetch department officers", true);
-          setActingOfficers([]);
-          setSupervisingOfficers([]);
-          setApprovalOfficers([]);
-        }
-      }
+      console.log(
+        `Found ${actingList.length} acting officers, ${approvalList.length} approval officers`
+      );
     } catch (err) {
+      console.error("Error fetching department officers:", err);
       showMessage("Failed to fetch department officers", true);
-      console.error(err);
+      setActingOfficers([]);
+      setSupervisingOfficers([]);
+      setApprovalOfficers([]);
     }
   };
+
+  // Calculate working days when dates change
+  const calculateWorkingDays = async (startDate, endDate) => {
+    if (!startDate || !endDate) {
+      setWorkingDaysInfo(null);
+      return;
+    }
+
+    try {
+      const response = await API.post("/leaves/calculate-working-days", {
+        startDate,
+        endDate,
+      });
+
+      console.log("Working days calculation:", response);
+      setWorkingDaysInfo(response);
+    } catch (error) {
+      console.error("Error calculating working days:", error);
+      setWorkingDaysInfo(null);
+    }
+  };
+
+  // Effect to calculate working days when dates change
+  useEffect(() => {
+    if (
+      leaveForm.startDate &&
+      leaveForm.endDate &&
+      leaveForm.leaveType &&
+      leaveForm.leaveType !== "SHORT" &&
+      leaveForm.leaveType !== "HALF_DAY" &&
+      leaveForm.leaveType !== "MATERNITY"
+    ) {
+      calculateWorkingDays(leaveForm.startDate, leaveForm.endDate);
+    } else {
+      setWorkingDaysInfo(null);
+    }
+  }, [leaveForm.startDate, leaveForm.endDate, leaveForm.leaveType]);
 
   // Handle Leave Submission
   const handleSubmitLeave = async () => {
@@ -447,6 +366,9 @@ const SubmitLeaveRequest = ({
         maternityLeaveType: "FULL_PAY",
       });
 
+      // Clear working days info
+      setWorkingDaysInfo(null);
+
       // Refresh data
       refreshData();
     } catch (err) {
@@ -463,8 +385,6 @@ const SubmitLeaveRequest = ({
 
     console.log("Initializing SubmitLeaveRequest component...");
     fetchCurrentUser();
-    fetchLeaveEntitlements();
-    fetchShortLeaveEntitlements();
   }, [email, token]);
 
   // Authentication check
@@ -672,12 +592,13 @@ const SubmitLeaveRequest = ({
                         fontSize: isMobile ? "13px" : "14px",
                       }}
                       value={leaveForm.leaveType}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         setLeaveForm({
                           ...leaveForm,
                           leaveType: e.target.value,
-                        })
-                      }
+                        });
+                        setWorkingDaysInfo(null);
+                      }}
                       required
                     >
                       <option value="">Select Leave Type</option>
@@ -845,8 +766,9 @@ const SubmitLeaveRequest = ({
                     />
                   </div>
 
-                  {/* End Date - Hidden for SHORT, HALF_DAY, and MATERNITY */}
-                  {leaveForm.leaveType !== "SHORT" &&
+                  {/* End Date - Only for regular leaves */}
+                  {leaveForm.leaveType &&
+                    leaveForm.leaveType !== "SHORT" &&
                     leaveForm.leaveType !== "HALF_DAY" &&
                     leaveForm.leaveType !== "MATERNITY" && (
                       <div
@@ -880,42 +802,102 @@ const SubmitLeaveRequest = ({
                       </div>
                     )}
 
-                  {/* Maternity Payment Type - Only for MATERNITY leave */}
-                  {leaveForm.leaveType === "MATERNITY" && (
-                    <div
-                      className={`${isMobile ? "col-12" : "col-lg-4 col-md-6"}`}
-                    >
-                      <label
-                        className="form-label fw-semibold text-dark"
-                        style={{ fontSize: isMobile ? "13px" : "14px" }}
-                      >
-                        Payment Type <span className="text-danger">*</span>
-                      </label>
-                      <select
-                        className="form-select border-0 shadow-sm rounded-3"
+                  {/* Working Days Breakdown - Only for regular leaves */}
+                  {workingDaysInfo && workingDaysInfo.workingDays >= 0 && (
+                    <div className="col-12">
+                      <div
+                        className="alert border-0 rounded-3 d-flex align-items-start"
                         style={{
-                          height: isMobile ? "40px" : "45px",
-                          fontSize: isMobile ? "13px" : "14px",
+                          backgroundColor: "#e8f5e9",
+                          borderLeft: "4px solid #4caf50",
                         }}
-                        value={leaveForm.maternityLeaveType}
-                        onChange={(e) =>
-                          setLeaveForm({
-                            ...leaveForm,
-                            maternityLeaveType: e.target.value,
-                          })
-                        }
-                        required
                       >
-                        {maternityPaymentOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
+                        <Calendar
+                          size={20}
+                          className="me-3 mt-1 flex-shrink-0"
+                          style={{ color: "#4caf50" }}
+                        />
+                        <div className="w-100">
+                          <h6
+                            className="mb-2 fw-bold"
+                            style={{
+                              color: "#2e7d32",
+                              fontSize: isMobile ? "13px" : "14px",
+                            }}
+                          >
+                            Leave Duration Breakdown
+                          </h6>
+                          <div
+                            className="row g-2"
+                            style={{ fontSize: isMobile ? "12px" : "13px" }}
+                          >
+                            <div className="col-6 col-md-3">
+                              <div className="bg-white rounded-2 p-2 text-center">
+                                <small className="text-muted d-block">
+                                  Total Days
+                                </small>
+                                <strong className="fs-5 text-primary">
+                                  {workingDaysInfo.totalDays}
+                                </strong>
+                              </div>
+                            </div>
+                            <div className="col-6 col-md-3">
+                              <div className="bg-white rounded-2 p-2 text-center">
+                                <small className="text-muted d-block">
+                                  Working Days
+                                </small>
+                                <strong
+                                  className="fs-5"
+                                  style={{ color: "#4caf50" }}
+                                >
+                                  {workingDaysInfo.workingDays}
+                                </strong>
+                              </div>
+                            </div>
+                            <div className="col-6 col-md-3">
+                              <div className="bg-white rounded-2 p-2 text-center">
+                                <small className="text-muted d-block">
+                                  Weekends
+                                </small>
+                                <strong className="fs-5 text-secondary">
+                                  {workingDaysInfo.weekendDays}
+                                </strong>
+                              </div>
+                            </div>
+                            <div className="col-6 col-md-3">
+                              <div className="bg-white rounded-2 p-2 text-center">
+                                <small className="text-muted d-block">
+                                  Holidays
+                                </small>
+                                <strong className="fs-5 text-warning">
+                                  {workingDaysInfo.publicHolidays}
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            className="mt-3 p-2 bg-white rounded-2"
+                            style={{ fontSize: isMobile ? "11px" : "12px" }}
+                          >
+                            <strong style={{ color: "#2e7d32" }}>
+                              ✓ Only {workingDaysInfo.workingDays} working day
+                              {workingDaysInfo.workingDays !== 1
+                                ? "s"
+                                : ""}{" "}
+                              will be deducted from your leave balance
+                            </strong>
+                            <br />
+                            <small className="text-muted">
+                              Weekends and public holidays are automatically
+                              excluded
+                            </small>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
-                  {/* Half Day Period Selection */}
+                  {/* Half Day Period - Only for HALF_DAY */}
                   {leaveForm.leaveType === "HALF_DAY" && (
                     <div
                       className={`${isMobile ? "col-12" : "col-lg-4 col-md-6"}`}
@@ -952,7 +934,7 @@ const SubmitLeaveRequest = ({
                     <>
                       <div
                         className={`${
-                          isMobile ? "col-6" : "col-lg-2 col-md-6"
+                          isMobile ? "col-12" : "col-lg-4 col-md-6"
                         }`}
                       >
                         <label
@@ -978,9 +960,10 @@ const SubmitLeaveRequest = ({
                           required
                         />
                       </div>
+
                       <div
                         className={`${
-                          isMobile ? "col-6" : "col-lg-2 col-md-6"
+                          isMobile ? "col-12" : "col-lg-4 col-md-6"
                         }`}
                       >
                         <label
@@ -1009,61 +992,42 @@ const SubmitLeaveRequest = ({
                     </>
                   )}
 
-                  {/* Duration Display */}
-                  {leaveForm.startDate && (
-                    <div className="col-12">
-                      <div
-                        className={`p-3 bg-light rounded-3 ${
-                          isMobile ? "text-center" : ""
-                        }`}
+                  {/* Maternity Payment Type - Only for MATERNITY leave */}
+                  {leaveForm.leaveType === "MATERNITY" && (
+                    <div
+                      className={`${isMobile ? "col-12" : "col-lg-4 col-md-6"}`}
+                    >
+                      <label
+                        className="form-label fw-semibold text-dark"
+                        style={{ fontSize: isMobile ? "13px" : "14px" }}
                       >
-                        <div
-                          className={`d-flex ${
-                            isMobile ? "flex-column" : ""
-                          } align-items-center ${
-                            isMobile ? "text-center" : ""
-                          }`}
-                        >
-                          <Calendar
-                            size={20}
-                            className={`text-primary ${
-                              isMobile ? "mb-2" : "me-2"
-                            }`}
-                          />
-                          <span
-                            className="fw-semibold text-dark"
-                            style={{ fontSize: isMobile ? "0.9rem" : "1rem" }}
-                          >
-                            {leaveForm.leaveType === "HALF_DAY" &&
-                              `Half Day Leave - ${leaveForm.halfDayPeriod} Period`}
-                            {leaveForm.leaveType === "SHORT" &&
-                              leaveForm.startTime &&
-                              leaveForm.endTime &&
-                              `Short Leave: ${leaveForm.startTime} - ${leaveForm.endTime}`}
-                            {leaveForm.leaveType === "MATERNITY" &&
-                              `Maternity Leave - Start Date: ${new Date(
-                                leaveForm.startDate
-                              ).toLocaleDateString()} (${
-                                maternityPaymentOptions.find(
-                                  (opt) =>
-                                    opt.value === leaveForm.maternityLeaveType
-                                )?.label
-                              }) - End date will be determined by admin`}
-                            {leaveForm.leaveType !== "HALF_DAY" &&
-                              leaveForm.leaveType !== "SHORT" &&
-                              leaveForm.leaveType !== "MATERNITY" &&
-                              leaveForm.endDate &&
-                              `Total Days: ${calculateDaysUtil(
-                                leaveForm.startDate,
-                                leaveForm.endDate
-                              )}`}
-                          </span>
-                        </div>
-                      </div>
+                        Payment Type <span className="text-danger">*</span>
+                      </label>
+                      <select
+                        className="form-select border-0 shadow-sm rounded-3"
+                        style={{
+                          height: isMobile ? "40px" : "45px",
+                          fontSize: isMobile ? "13px" : "14px",
+                        }}
+                        value={leaveForm.maternityLeaveType}
+                        onChange={(e) =>
+                          setLeaveForm({
+                            ...leaveForm,
+                            maternityLeaveType: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        {maternityPaymentOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
-                  {/* Reason */}
+                  {/* Reason for Leave */}
                   <div className="col-12">
                     <label
                       className="form-label fw-semibold text-dark"
@@ -1073,50 +1037,42 @@ const SubmitLeaveRequest = ({
                     </label>
                     <textarea
                       className="form-control border-0 shadow-sm rounded-3"
+                      rows="3"
                       style={{ fontSize: isMobile ? "13px" : "14px" }}
-                      rows={isMobile ? "2" : "3"}
+                      placeholder="Please provide the reason for your leave request..."
                       value={leaveForm.reason}
                       onChange={(e) =>
-                        setLeaveForm({ ...leaveForm, reason: e.target.value })
+                        setLeaveForm({
+                          ...leaveForm,
+                          reason: e.target.value,
+                        })
                       }
-                      placeholder="Please provide the reason for your leave request..."
                     />
                   </div>
 
                   {/* Submit Button */}
-                  <div className="col-12 d-flex justify-content-center mt-4">
+                  <div className="col-12">
                     <button
                       type="submit"
-                      className="btn btn-lg px-4 py-3 rounded-3 shadow-sm text-white"
-                      disabled={
-                        loading ||
-                        actingOfficers.length === 0 ||
-                        supervisingOfficers.length === 0 ||
-                        approvalOfficers.length === 0
-                      }
+                      className="btn btn-primary w-100 py-3 rounded-3 shadow-sm d-flex align-items-center justify-content-center"
                       style={{
-                        minWidth: isMobile ? "90%" : "200px",
-                        background:
-                          "linear-gradient(135deg, #5b9ad9 0%, #0d4f92 100%)",
-                        border: "none",
                         fontSize: isMobile ? "14px" : "16px",
                         fontWeight: "600",
-                        height: isMobile ? "45px" : "auto",
                       }}
+                      disabled={loading}
                     >
                       {loading ? (
                         <>
-                          <div
+                          <span
                             className="spinner-border spinner-border-sm me-2"
                             role="status"
-                          >
-                            <span className="visually-hidden">Loading...</span>
-                          </div>
+                            aria-hidden="true"
+                          ></span>
                           Submitting...
                         </>
                       ) : (
                         <>
-                          <Send size={isMobile ? 16 : 18} className="me-2" />
+                          <Send size={18} className="me-2" />
                           Submit Leave Request
                         </>
                       )}
@@ -1128,113 +1084,6 @@ const SubmitLeaveRequest = ({
           </div>
         </div>
       </div>
-
-      {/* Responsive Styles */}
-      <style jsx>{`
-        /* Glass effect */
-        .glass-card {
-          background: #bccee4f2;
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
-
-        /* Mobile responsive adjustments */
-        @media (max-width: 991.98px) {
-          .main-content {
-            margin-left: 0 !important;
-          }
-
-          /* Better mobile spacing */
-          .container-fluid {
-            padding-left: 0.75rem !important;
-            padding-right: 0.75rem !important;
-          }
-
-          /* Mobile form improvements */
-          .form-select,
-          .form-control {
-            font-size: 16px !important; /* Prevents zoom on iOS */
-          }
-
-          /* Mobile button improvements */
-          .btn-lg {
-            padding: 0.75rem 1rem;
-            font-size: 0.9rem;
-          }
-        }
-
-        @media (max-width: 576px) {
-          /* Extra small screens */
-          .glass-card {
-            border-radius: 1rem !important;
-            margin: 0.5rem;
-          }
-
-          /* Stack form elements better on very small screens */
-          .row.g-3 {
-            gap: 0.75rem !important;
-          }
-
-          /* Improve alert spacing */
-          .alert {
-            margin-bottom: 1rem;
-            padding: 0.75rem;
-          }
-        }
-
-        /* Ensure sidebar doesn't interfere on mobile */
-        @media (max-width: 991.98px) {
-          .translate-x-n100 {
-            transform: translateX(-100%) !important;
-          }
-
-          .translate-x-0 {
-            transform: translateX(0) !important;
-          }
-        }
-
-        /* Loading animation */
-        .spinner-border {
-          animation: spinner-border 0.75s linear infinite;
-        }
-
-        @keyframes spinner-border {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        /* Touch improvements for mobile */
-        @media (pointer: coarse) {
-          .form-select,
-          .form-control,
-          .btn {
-            min-height: 44px;
-          }
-        }
-
-        /* Enhanced accessibility */
-        .form-label {
-          margin-bottom: 0.5rem;
-        }
-
-        /* Slide in animation */
-        .slide-in {
-          animation: slideIn 0.5s ease-out;
-        }
-
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
   );
 };

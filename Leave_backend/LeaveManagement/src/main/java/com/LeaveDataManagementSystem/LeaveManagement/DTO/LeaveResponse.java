@@ -1,14 +1,9 @@
 package com.LeaveDataManagementSystem.LeaveManagement.DTO;
 
-import com.LeaveDataManagementSystem.LeaveManagement.Model.Leave;
-import com.LeaveDataManagementSystem.LeaveManagement.Model.LeaveStatus;
-import com.LeaveDataManagementSystem.LeaveManagement.Model.ActingOfficerStatus;
-import com.LeaveDataManagementSystem.LeaveManagement.Model.ApprovalOfficerStatus;
-
+import com.LeaveDataManagementSystem.LeaveManagement.Model.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 
 public class LeaveResponse {
     private String id;
@@ -17,38 +12,57 @@ public class LeaveResponse {
     private String leaveType;
     private LocalDate startDate;
     private LocalDate endDate;
-    private int totalDays;
-    private int numberOfDays;
     private String reason;
-    private String actingOfficerEmail;
-    private String actingOfficerName;
-    private String approvalOfficerEmail;
-    private String approvalOfficerName;
-    private String status;
-    private String actingOfficerStatus;
-    private String approvalOfficerStatus;
-    private String actingOfficerComments;
-    private String approvalOfficerComments;
-    private String createdAt;
-    private String submittedDate;
-    private String actingOfficerApprovedAt;
-    private String approvalOfficerApprovedAt;
+
+    // ✅ NEW: Working days information
+    private int workingDays;
+    private int totalDays;
+    private int weekendDays;
+    private int publicHolidays;
+    private String durationDisplay;
+
+    private boolean isShortLeave;
+    private boolean isHalfDay;
+    private String halfDayPeriod;
     private LocalTime shortLeaveStartTime;
     private LocalTime shortLeaveEndTime;
 
+    private boolean isMaternityLeave;
+    private String maternityLeaveType;
+    private boolean isMaternityEndDateSet;
+    private String maternityAdditionalDetails;
 
+    private String actingOfficerEmail;
+    private String actingOfficerName;
     private String supervisingOfficerEmail;
     private String supervisingOfficerName;
-    private String supervisingOfficerStatus;
+    private String approvalOfficerEmail;
+    private String approvalOfficerName;
+
+    private LeaveStatus status;
+    private ActingOfficerStatus actingOfficerStatus;
+    private SupervisingOfficerStatus supervisingOfficerStatus;
+    private ApprovalOfficerStatus approvalOfficerStatus;
+
+    private String actingOfficerComments;
     private String supervisingOfficerComments;
-    private String supervisingOfficerApprovedAt;
+    private String approvalOfficerComments;
 
+    private LocalDateTime actingOfficerApprovedAt;
+    private LocalDateTime supervisingOfficerApprovedAt;
+    private LocalDateTime approvalOfficerApprovedAt;
 
-    private String maternityLeaveType;
-    private boolean isMaternityLeave;
-    private String maternityLeaveDuration;
+    private boolean isCancelled;
+    private LocalDateTime cancelledAt;
+    private String cancelledBy;
+    private String cancellationReason;
 
-    // Constructor from Leave entity
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
+
+    public LeaveResponse() {}
+
+    // ✅ UPDATED: Constructor that includes working days information
     public LeaveResponse(Leave leave) {
         this.id = leave.getId();
         this.employeeEmail = leave.getEmployeeEmail();
@@ -56,54 +70,54 @@ public class LeaveResponse {
         this.leaveType = leave.getLeaveType();
         this.startDate = leave.getStartDate();
         this.endDate = leave.getEndDate();
-
-        this.totalDays = (int) leave.getTotalDays();
-        this.numberOfDays = (int) leave.getTotalDays();
-
         this.reason = leave.getReason();
-        this.actingOfficerEmail = leave.getActingOfficerEmail();
-        this.actingOfficerName = leave.getActingOfficerName();
-        this.approvalOfficerEmail = leave.getApprovalOfficerEmail();
-        this.approvalOfficerName = leave.getApprovalOfficerName();
 
-        this.status = leave.getStatus() != null ? leave.getStatus().toString() : null;
-        this.actingOfficerStatus = leave.getActingOfficerStatus() != null ? leave.getActingOfficerStatus().toString() : null;
-        this.approvalOfficerStatus = leave.getApprovalOfficerStatus() != null ? leave.getApprovalOfficerStatus().toString() : null;
-        this.supervisingOfficerStatus = leave.getSupervisingOfficerStatus() != null ?leave.getSupervisingOfficerStatus().toString() : null;
+        // ✅ Map working days fields
+        this.workingDays = leave.getWorkingDays();
+        this.totalDays = leave.getTotalDays();
+        this.weekendDays = leave.getWeekendDays();
+        this.publicHolidays = leave.getPublicHolidays();
+        this.durationDisplay = leave.getDurationDisplay();
 
-        this.actingOfficerComments = leave.getActingOfficerComments();
-        this.approvalOfficerComments = leave.getApprovalOfficerComments();
-        this.supervisingOfficerComments = leave.getSupervisingOfficerComments();
-
-
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        this.createdAt = leave.getCreatedAt() != null ? leave.getCreatedAt().format(formatter) : null;
-        this.submittedDate = this.createdAt;
-
-        this.actingOfficerApprovedAt = leave.getActingOfficerApprovedAt() != null ? leave.getActingOfficerApprovedAt().format(formatter) : null;
-        this.approvalOfficerApprovedAt = leave.getApprovalOfficerApprovedAt() != null ? leave.getApprovalOfficerApprovedAt().format(formatter) : null;
-        this.supervisingOfficerApprovedAt = leave.getSupervisingOfficerApprovedAt() != null ?leave.getSupervisingOfficerApprovedAt().format(formatter) : null;
-
-        // ✅ Add short leave times
+        this.isShortLeave = leave.isShortLeave();
+        this.isHalfDay = leave.isHalfDay();
+        this.halfDayPeriod = leave.getHalfDayPeriod();
         this.shortLeaveStartTime = leave.getShortLeaveStartTime();
         this.shortLeaveEndTime = leave.getShortLeaveEndTime();
 
-        // NEW: Map supervising officer fields
+        this.isMaternityLeave = leave.isMaternityLeave();
+        this.maternityLeaveType = leave.getMaternityLeaveType();
+        this.isMaternityEndDateSet = leave.isMaternityEndDateSet();
+        this.maternityAdditionalDetails = leave.getMaternityAdditionalDetails();
+
+        this.actingOfficerEmail = leave.getActingOfficerEmail();
+        this.actingOfficerName = leave.getActingOfficerName();
         this.supervisingOfficerEmail = leave.getSupervisingOfficerEmail();
         this.supervisingOfficerName = leave.getSupervisingOfficerName();
+        this.approvalOfficerEmail = leave.getApprovalOfficerEmail();
+        this.approvalOfficerName = leave.getApprovalOfficerName();
 
+        this.status = leave.getStatus();
+        this.actingOfficerStatus = leave.getActingOfficerStatus();
+        this.supervisingOfficerStatus = leave.getSupervisingOfficerStatus();
+        this.approvalOfficerStatus = leave.getApprovalOfficerStatus();
 
-// Add maternity leave specific fields
-        this.maternityLeaveType = leave.getMaternityLeaveType();
-        this.isMaternityLeave = leave.isMaternityLeave();
+        this.actingOfficerComments = leave.getActingOfficerComments();
+        this.supervisingOfficerComments = leave.getSupervisingOfficerComments();
+        this.approvalOfficerComments = leave.getApprovalOfficerComments();
 
-        // Optional: include maternity duration description
-        if (leave.isMaternityLeave()) {
-            this.maternityLeaveDuration = leave.getMaternityLeaveDuration();
-        }
+        this.actingOfficerApprovedAt = leave.getActingOfficerApprovedAt();
+        this.supervisingOfficerApprovedAt = leave.getSupervisingOfficerApprovedAt();
+        this.approvalOfficerApprovedAt = leave.getApprovalOfficerApprovedAt();
 
+        this.isCancelled = leave.isCancelled();
+        this.cancelledAt = leave.getCancelledAt();
+        this.cancelledBy = leave.getCancelledBy();
+        this.cancellationReason = leave.getCancellationReason();
+
+        this.createdAt = leave.getCreatedAt();
+        this.updatedAt = leave.getUpdatedAt();
     }
-
 
     // Getters and Setters
     public String getId() { return id; }
@@ -124,20 +138,53 @@ public class LeaveResponse {
     public LocalDate getEndDate() { return endDate; }
     public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
 
+    public String getReason() { return reason; }
+    public void setReason(String reason) { this.reason = reason; }
+
+    // ✅ NEW: Working days getters/setters
+    public int getWorkingDays() { return workingDays; }
+    public void setWorkingDays(int workingDays) { this.workingDays = workingDays; }
+
+    public int getTotalDays() { return totalDays; }
+    public void setTotalDays(int totalDays) { this.totalDays = totalDays; }
+
+    public int getWeekendDays() { return weekendDays; }
+    public void setWeekendDays(int weekendDays) { this.weekendDays = weekendDays; }
+
+    public int getPublicHolidays() { return publicHolidays; }
+    public void setPublicHolidays(int publicHolidays) { this.publicHolidays = publicHolidays; }
+
+    public String getDurationDisplay() { return durationDisplay; }
+    public void setDurationDisplay(String durationDisplay) { this.durationDisplay = durationDisplay; }
+
+    public boolean isShortLeave() { return isShortLeave; }
+    public void setShortLeave(boolean shortLeave) { isShortLeave = shortLeave; }
+
+    public boolean isHalfDay() { return isHalfDay; }
+    public void setHalfDay(boolean halfDay) { isHalfDay = halfDay; }
+
+    public String getHalfDayPeriod() { return halfDayPeriod; }
+    public void setHalfDayPeriod(String halfDayPeriod) { this.halfDayPeriod = halfDayPeriod; }
+
     public LocalTime getShortLeaveStartTime() { return shortLeaveStartTime; }
     public void setShortLeaveStartTime(LocalTime shortLeaveStartTime) { this.shortLeaveStartTime = shortLeaveStartTime; }
 
     public LocalTime getShortLeaveEndTime() { return shortLeaveEndTime; }
     public void setShortLeaveEndTime(LocalTime shortLeaveEndTime) { this.shortLeaveEndTime = shortLeaveEndTime; }
 
-    public int getTotalDays() { return totalDays; }
-    public void setTotalDays(int totalDays) { this.totalDays = totalDays; }
+    public boolean isMaternityLeave() { return isMaternityLeave; }
+    public void setMaternityLeave(boolean maternityLeave) { isMaternityLeave = maternityLeave; }
 
-    public int getNumberOfDays() { return numberOfDays; }
-    public void setNumberOfDays(int numberOfDays) { this.numberOfDays = numberOfDays; }
+    public String getMaternityLeaveType() { return maternityLeaveType; }
+    public void setMaternityLeaveType(String maternityLeaveType) { this.maternityLeaveType = maternityLeaveType; }
 
-    public String getReason() { return reason; }
-    public void setReason(String reason) { this.reason = reason; }
+    public boolean isMaternityEndDateSet() { return isMaternityEndDateSet; }
+    public void setMaternityEndDateSet(boolean maternityEndDateSet) { this.isMaternityEndDateSet = maternityEndDateSet; }
+
+    public String getMaternityAdditionalDetails() { return maternityAdditionalDetails; }
+    public void setMaternityAdditionalDetails(String maternityAdditionalDetails) {
+        this.maternityAdditionalDetails = maternityAdditionalDetails;
+    }
 
     public String getActingOfficerEmail() { return actingOfficerEmail; }
     public void setActingOfficerEmail(String actingOfficerEmail) { this.actingOfficerEmail = actingOfficerEmail; }
@@ -145,76 +192,91 @@ public class LeaveResponse {
     public String getActingOfficerName() { return actingOfficerName; }
     public void setActingOfficerName(String actingOfficerName) { this.actingOfficerName = actingOfficerName; }
 
-    public String getApprovalOfficerEmail() { return approvalOfficerEmail; }
-    public void setApprovalOfficerEmail(String approvalOfficerEmail) { this.approvalOfficerEmail = approvalOfficerEmail; }
-
-    public String getApprovalOfficerName() { return approvalOfficerName; }
-    public void setApprovalOfficerName(String approvalOfficerName) { this.approvalOfficerName = approvalOfficerName; }
-
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-
-    public String getActingOfficerStatus() { return actingOfficerStatus; }
-    public void setActingOfficerStatus(String actingOfficerStatus) { this.actingOfficerStatus = actingOfficerStatus; }
-
-    public String getApprovalOfficerStatus() { return approvalOfficerStatus; }
-    public void setApprovalOfficerStatus(String approvalOfficerStatus) { this.approvalOfficerStatus = approvalOfficerStatus; }
-
-    public String getActingOfficerComments() { return actingOfficerComments; }
-    public void setActingOfficerComments(String actingOfficerComments) { this.actingOfficerComments = actingOfficerComments; }
-
-    public String getApprovalOfficerComments() { return approvalOfficerComments; }
-    public void setApprovalOfficerComments(String approvalOfficerComments) { this.approvalOfficerComments = approvalOfficerComments; }
-
-    public String getCreatedAt() { return createdAt; }
-    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
-
-    public String getSubmittedDate() { return submittedDate; }
-    public void setSubmittedDate(String submittedDate) { this.submittedDate = submittedDate; }
-
-    public String getActingOfficerApprovedAt() { return actingOfficerApprovedAt; }
-    public void setActingOfficerApprovedAt(String actingOfficerApprovedAt) { this.actingOfficerApprovedAt = actingOfficerApprovedAt; }
-
-    public String getApprovalOfficerApprovedAt() { return approvalOfficerApprovedAt; }
-    public void setApprovalOfficerApprovedAt(String approvalOfficerApprovedAt) { this.approvalOfficerApprovedAt = approvalOfficerApprovedAt; }
-
     public String getSupervisingOfficerEmail() { return supervisingOfficerEmail; }
-    public void setSupervisingOfficerEmail(String supervisingOfficerEmail) { this.supervisingOfficerEmail = supervisingOfficerEmail; }
+    public void setSupervisingOfficerEmail(String supervisingOfficerEmail) {
+        this.supervisingOfficerEmail = supervisingOfficerEmail;
+    }
 
     public String getSupervisingOfficerName() { return supervisingOfficerName; }
-    public void setSupervisingOfficerName(String supervisingOfficerName) { this.supervisingOfficerName = supervisingOfficerName; }
+    public void setSupervisingOfficerName(String supervisingOfficerName) {
+        this.supervisingOfficerName = supervisingOfficerName;
+    }
 
-    public String getSupervisingOfficerStatus() { return supervisingOfficerStatus; }
-    public void setSupervisingOfficerStatus(String supervisingOfficerStatus) { this.supervisingOfficerStatus = supervisingOfficerStatus; }
+    public String getApprovalOfficerEmail() { return approvalOfficerEmail; }
+    public void setApprovalOfficerEmail(String approvalOfficerEmail) {
+        this.approvalOfficerEmail = approvalOfficerEmail;
+    }
+
+    public String getApprovalOfficerName() { return approvalOfficerName; }
+    public void setApprovalOfficerName(String approvalOfficerName) {
+        this.approvalOfficerName = approvalOfficerName;
+    }
+
+    public LeaveStatus getStatus() { return status; }
+    public void setStatus(LeaveStatus status) { this.status = status; }
+
+    public ActingOfficerStatus getActingOfficerStatus() { return actingOfficerStatus; }
+    public void setActingOfficerStatus(ActingOfficerStatus actingOfficerStatus) {
+        this.actingOfficerStatus = actingOfficerStatus;
+    }
+
+    public SupervisingOfficerStatus getSupervisingOfficerStatus() { return supervisingOfficerStatus; }
+    public void setSupervisingOfficerStatus(SupervisingOfficerStatus supervisingOfficerStatus) {
+        this.supervisingOfficerStatus = supervisingOfficerStatus;
+    }
+
+    public ApprovalOfficerStatus getApprovalOfficerStatus() { return approvalOfficerStatus; }
+    public void setApprovalOfficerStatus(ApprovalOfficerStatus approvalOfficerStatus) {
+        this.approvalOfficerStatus = approvalOfficerStatus;
+    }
+
+    public String getActingOfficerComments() { return actingOfficerComments; }
+    public void setActingOfficerComments(String actingOfficerComments) {
+        this.actingOfficerComments = actingOfficerComments;
+    }
 
     public String getSupervisingOfficerComments() { return supervisingOfficerComments; }
-    public void setSupervisingOfficerComments(String supervisingOfficerComments) { this.supervisingOfficerComments = supervisingOfficerComments; }
-
-    public String getSupervisingOfficerApprovedAt() { return supervisingOfficerApprovedAt; }
-    public void setSupervisingOfficerApprovedAt(String supervisingOfficerApprovedAt) { this.supervisingOfficerApprovedAt = supervisingOfficerApprovedAt; }
-
-
-    public String getMaternityLeaveType() {
-        return maternityLeaveType;
+    public void setSupervisingOfficerComments(String supervisingOfficerComments) {
+        this.supervisingOfficerComments = supervisingOfficerComments;
     }
 
-    public void setMaternityLeaveType(String maternityLeaveType) {
-        this.maternityLeaveType = maternityLeaveType;
+    public String getApprovalOfficerComments() { return approvalOfficerComments; }
+    public void setApprovalOfficerComments(String approvalOfficerComments) {
+        this.approvalOfficerComments = approvalOfficerComments;
     }
 
-    public boolean isMaternityLeave() {
-        return isMaternityLeave;
+    public LocalDateTime getActingOfficerApprovedAt() { return actingOfficerApprovedAt; }
+    public void setActingOfficerApprovedAt(LocalDateTime actingOfficerApprovedAt) {
+        this.actingOfficerApprovedAt = actingOfficerApprovedAt;
     }
 
-    public void setMaternityLeave(boolean maternityLeave) {
-        isMaternityLeave = maternityLeave;
+    public LocalDateTime getSupervisingOfficerApprovedAt() { return supervisingOfficerApprovedAt; }
+    public void setSupervisingOfficerApprovedAt(LocalDateTime supervisingOfficerApprovedAt) {
+        this.supervisingOfficerApprovedAt = supervisingOfficerApprovedAt;
     }
 
-    public String getMaternityLeaveDuration() {
-        return maternityLeaveDuration;
+    public LocalDateTime getApprovalOfficerApprovedAt() { return approvalOfficerApprovedAt; }
+    public void setApprovalOfficerApprovedAt(LocalDateTime approvalOfficerApprovedAt) {
+        this.approvalOfficerApprovedAt = approvalOfficerApprovedAt;
     }
 
-    public void setMaternityLeaveDuration(String maternityLeaveDuration) {
-        this.maternityLeaveDuration = maternityLeaveDuration;
+    public boolean isCancelled() { return isCancelled; }
+    public void setCancelled(boolean cancelled) { isCancelled = cancelled; }
+
+    public LocalDateTime getCancelledAt() { return cancelledAt; }
+    public void setCancelledAt(LocalDateTime cancelledAt) { this.cancelledAt = cancelledAt; }
+
+    public String getCancelledBy() { return cancelledBy; }
+    public void setCancelledBy(String cancelledBy) { this.cancelledBy = cancelledBy; }
+
+    public String getCancellationReason() { return cancellationReason; }
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
